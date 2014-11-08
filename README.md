@@ -1,0 +1,4 @@
+pulses
+======
+
+EventEmitter meets Async
