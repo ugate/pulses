@@ -18,16 +18,25 @@ pw.on('one', function (flow, pulse, a, b, c) {
     flow.data.push(pulse.event);
     console.log('%s, %s, %s, %s', util.inspect(flow), util.inspect(pulse), a, b, c);
 });
-pw.on('one2', function (flow, pulse, a, b, c) {
-    flow.data.push(pulse.event);
-    console.log('%s, %s, %s, %s', util.inspect(flow), util.inspect(pulse), a, b, c);
-});
 pw.on('two', function (flow, pulse, a, b, c) {
     flow.data.push(pulse.event);
     console.log('%s, %s, %s, %s', util.inspect(flow), util.inspect(pulse), a, b, c);
     //pw.emit('error', new Error('test error'));
 });
 pw.on('three', function (flow, pulse, a, b, c) {
+    flow.data.push(pulse.event);
+    console.log('%s, %s, %s, %s', util.inspect(flow), util.inspect(pulse), a, b, c);
+});
+pw.on('one2', function (flow, pulse, a, b, c) {
+    flow.data.push(pulse.event);
+    console.log('%s, %s, %s, %s', util.inspect(flow), util.inspect(pulse), a, b, c);
+});
+pw.on('two2', function (flow, pulse, a, b, c) {
+    flow.data.push(pulse.event);
+    console.log('%s, %s, %s, %s', util.inspect(flow), util.inspect(pulse), a, b, c);
+    //pw.emit('error', new Error('test error'));
+});
+pw.on('three2', function (flow, pulse, a, b, c) {
     flow.data.push(pulse.event);
     console.log('%s, %s, %s, %s', util.inspect(flow), util.inspect(pulse), a, b, c);
 });
@@ -43,10 +52,10 @@ pw.on('error', function (e) {
 });
 var pl = ['one', 'two', 'three'];
 pl.parallel = true;
-pw.transmit(pl, 'A', 'B', 'C');
+//pw.transmit(pl, 'A', 'B', 'C');
 //show();
 pw.transmit(['one', 'two', 'three'], 'D', 'E', 'F');
-//pw.transmit(['one2', 'two', 'three'], 'a', 'b', 'c');
+pw.transmit({ events: ['one2', 'two2', 'three2'], parallel: true }, 'a', 'b', 'c');
 function show() {
     console.log('ticking');
     if (!pdone)
@@ -62,9 +71,8 @@ function show() {
  * @param async true asynchronous emission, false for synchronous emission
  */
 function infuse(pw, opts, evts, args, fn) {
-    var meds = Array.isArray(evts) ? evts : [evts];
     var iv = catheter(pw, opts, args && fn ? Array.prototype.slice.call(args, fn.length) : null);
-    iv.pump(meds, iv.args.length);
+    iv.pump(evts, iv.args.length);
 }
 
 function asyncd(pw, evts, fname, args, fn) {
