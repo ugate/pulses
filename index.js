@@ -50,11 +50,11 @@ pw.on('end', function (artery, vein, pulse, a, b, c) {
 pw.on('error', function (e) {
     console.log(e);
 });
-var pl = ['one', { event: 'two', repeat: 2 }, 'three'];
+var pl = ['one', 'two', 'three'];
 pl.type = 'parallel';
 pw.pump(pl, 'A', 'B', 'C');
 //show();
-pw.pump(['one', 'two', 'three'], 'D', 'E', 'F');
+pw.pump(['one', { event: 'two', repeat: 10 }, 'three'], 'D', 'E', 'F');
 pw.pump({ events: ['one2', 'two2', 'three2'], type: 'parallel' }, 'a', 'b', 'c');
 function show() {
     console.log('ticking');
