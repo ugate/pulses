@@ -11,51 +11,51 @@ util.inherits(PathEmitter, PulseEmitter);
 var pulses = exports;
 pulses.PulseEmitter = PulseEmitter;
 pulses.PathEmitter = PathEmitter;
-pulses.mergeObject = merge;
+pulses.mergeObject = catheter.merge;
 
 var pw = new PulseEmitter(), pdone = false;
-pw.on('one', function (flow, pulse, a, b, c) {
-    flow.data.push(pulse.event);
-    console.log('%s, %s, %s, %s', util.inspect(flow), util.inspect(pulse), a, b, c);
+pw.on('one', function (artery, vein, pulse, a, b, c) {
+    vein.data.push(pulse.event);
+    console.log('%s, %s, %s, %s', util.inspect(artery), util.inspect(pulse), a, b, c);
 });
-pw.on('two', function (flow, pulse, a, b, c) {
-    flow.data.push(pulse.event);
-    console.log('%s, %s, %s, %s', util.inspect(flow), util.inspect(pulse), a, b, c);
+pw.on('two', function (artery, vein, pulse, a, b, c) {
+    vein.data.push(pulse.event);
+    console.log('%s, %s, %s, %s', util.inspect(artery), util.inspect(pulse), a, b, c);
     //pw.emit('error', new Error('test error'));
 });
-pw.on('three', function (flow, pulse, a, b, c) {
-    flow.data.push(pulse.event);
-    console.log('%s, %s, %s, %s', util.inspect(flow), util.inspect(pulse), a, b, c);
+pw.on('three', function (artery, vein, pulse, a, b, c) {
+    vein.data.push(pulse.event);
+    console.log('%s, %s, %s, %s', util.inspect(artery), util.inspect(pulse), a, b, c);
 });
-pw.on('one2', function (flow, pulse, a, b, c) {
-    flow.data.push(pulse.event);
-    console.log('%s, %s, %s, %s', util.inspect(flow), util.inspect(pulse), a, b, c);
+pw.on('one2', function (artery, vein, pulse, a, b, c) {
+    vein.data.push(pulse.event);
+    console.log('%s, %s, %s, %s', util.inspect(artery), util.inspect(pulse), a, b, c);
 });
-pw.on('two2', function (flow, pulse, a, b, c) {
-    flow.data.push(pulse.event);
-    console.log('%s, %s, %s, %s', util.inspect(flow), util.inspect(pulse), a, b, c);
+pw.on('two2', function (artery, vein, pulse, a, b, c) {
+    vein.data.push(pulse.event);
+    console.log('%s, %s, %s, %s', util.inspect(artery), util.inspect(pulse), a, b, c);
     //pw.emit('error', new Error('test error'));
 });
-pw.on('three2', function (flow, pulse, a, b, c) {
-    flow.data.push(pulse.event);
-    console.log('%s, %s, %s, %s', util.inspect(flow), util.inspect(pulse), a, b, c);
+pw.on('three2', function (artery, vein, pulse, a, b, c) {
+    vein.data.push(pulse.event);
+    console.log('%s, %s, %s, %s', util.inspect(artery), util.inspect(pulse), a, b, c);
 });
-pw.on('end', function (flow, pulse, a, b, c) {
-    flow.data.push(pulse.event)
-    console.log('%s, %s, %s, %s', util.inspect(flow), util.inspect(pulse), a, b, c);
-    if (flow.parallel) {
+pw.on('end', function (artery, vein, pulse, a, b, c) {
+    vein.data.push(pulse.event)
+    console.log('%s, %s, %s, %s', util.inspect(artery), util.inspect(pulse), a, b, c);
+    if (artery.isAsync) {
         pdone = true;
     }
 });
 pw.on('error', function (e) {
     console.log(e);
 });
-var pl = ['one', 'two', 'three'];
-pl.parallel = true;
-//pw.transmit(pl, 'A', 'B', 'C');
+var pl = ['one', { event: 'two', repeat: 2 }, 'three'];
+pl.type = 'parallel';
+pw.pump(pl, 'A', 'B', 'C');
 //show();
-pw.transmit(['one', 'two', 'three'], 'D', 'E', 'F');
-pw.transmit({ events: ['one2', 'two2', 'three2'], parallel: true }, 'a', 'b', 'c');
+pw.pump(['one', 'two', 'three'], 'D', 'E', 'F');
+pw.pump({ events: ['one2', 'two2', 'three2'], type: 'parallel' }, 'a', 'b', 'c');
 function show() {
     console.log('ticking');
     if (!pdone)
@@ -92,22 +92,23 @@ function Callback(cb, pw) {
 }
 
 function PulseEmitter(options) {
-    var pw = this, opts = merge({ endEvent: 'end', errorEvent: 'error' }, options);
+    var pw = this, opts = catheter.merge({ endEvent: 'end', errorEvent: 'error' }, options);
     events.EventEmitter.call(pw);
     pw.on = function on() {
         var args = Array.prototype.slice.call(arguments, 0);
         var rc = args[1] && typeof args[1] === 'function' ? 1 : 0;
         var cb = args.splice(1, rc, function pulseListener(evt) {
-            try {
+            //try {
                 //if (cb) {
                 cb.apply(this, arguments);
                 //} else if (true) {
                 //    evt.data.push('');
                 //}
-            } catch (e) {
-                e.event = args[0];
-                pw.error(e);
-            }
+            //} catch (e) {
+                //e.event = args[0];
+                //throw e;
+                //pw.error(e);
+            //}
         })[0];
         PulseEmitter.super_.prototype.on.apply(pw, args);
     };
@@ -127,8 +128,8 @@ function PulseEmitter(options) {
     pw.after = function after(evts) {
         infuse(pw, opts, evts);
     };
-    pw.transmit = function transmit(evts) {
-        infuse(pw, opts, evts, arguments, pw.transmit);
+    pw.pump = function pump(evts) {
+        infuse(pw, opts, evts, arguments, pw.pump);
     };
     //pw.data = function dataFunc(fn) {
     //    return function data(evt) {
@@ -278,21 +279,4 @@ function defer(cb) {
         }
     }
     return defer.nextLoop(cb);
-}
-
-/**
- * Merges an object with the properties of another object
- * 
- * @param dest the destination object where the properties will be added
- * @param src the source object that will be used for adding new properties to the destination
- * @returns the destination object
- */
-function merge(dest, src) {
-    if (!src || typeof src !== 'object') return dest;
-    var keys = Object.keys(src);
-    var i = keys.length;
-    while (i--) {
-        dest[keys[i]] = src[keys[i]];
-    }
-    return dest;
 }
