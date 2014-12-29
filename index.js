@@ -14,34 +14,34 @@ pulses.PathEmitter = PathEmitter;
 pulses.mergeObject = catheter.merge;
 
 var pw = new PulseEmitter(), pdone = false;
-pw.on('one', function (artery, vein, pulse, a, b, c) {
-    vein.data.push(pulse.event);
+pw.on('one', function (artery, pulse, a, b, c) {
+    artery.data.push(pulse.event);
     console.log('%s, %s, %s, %s', util.inspect(artery), util.inspect(pulse), a, b, c);
 });
-pw.on('two', function (artery, vein, pulse, a, b, c) {
-    vein.data.push(pulse.event);
-    console.log('%s, %s, %s, %s', util.inspect(artery), util.inspect(pulse), a, b, c);
-    //pw.emit('error', new Error('test error'));
-});
-pw.on('three', function (artery, vein, pulse, a, b, c) {
-    vein.data.push(pulse.event);
-    console.log('%s, %s, %s, %s', util.inspect(artery), util.inspect(pulse), a, b, c);
-});
-pw.on('one2', function (artery, vein, pulse, a, b, c) {
-    vein.data.push(pulse.event);
-    console.log('%s, %s, %s, %s', util.inspect(artery), util.inspect(pulse), a, b, c);
-});
-pw.on('two2', function (artery, vein, pulse, a, b, c) {
-    vein.data.push(pulse.event);
+pw.on('two', function (artery, pulse, a, b, c) {
+    artery.data.push(pulse.event);
     console.log('%s, %s, %s, %s', util.inspect(artery), util.inspect(pulse), a, b, c);
     //pw.emit('error', new Error('test error'));
 });
-pw.on('three2', function (artery, vein, pulse, a, b, c) {
-    vein.data.push(pulse.event);
+pw.on('three', function (artery, pulse, a, b, c) {
+    artery.data.push(pulse.event);
     console.log('%s, %s, %s, %s', util.inspect(artery), util.inspect(pulse), a, b, c);
 });
-pw.on('end', function (artery, vein, pulse, a, b, c) {
-    vein.data.push(pulse.event)
+pw.on('one2', function (artery, pulse, a, b, c) {
+    artery.data.push(pulse.event);
+    console.log('%s, %s, %s, %s', util.inspect(artery), util.inspect(pulse), a, b, c);
+});
+pw.on('two2', function (artery, pulse, a, b, c) {
+    artery.data.push(pulse.event);
+    console.log('%s, %s, %s, %s', util.inspect(artery), util.inspect(pulse), a, b, c);
+    //pw.emit('error', new Error('test error'));
+});
+pw.on('three2', function (artery, pulse, a, b, c) {
+    artery.data.push(pulse.event);
+    console.log('%s, %s, %s, %s', util.inspect(artery), util.inspect(pulse), a, b, c);
+});
+pw.on('end', function (artery, pulse, a, b, c) {
+    artery.data.push(pulse.event)
     console.log('%s, %s, %s, %s', util.inspect(artery), util.inspect(pulse), a, b, c);
     if (artery.isAsync) {
         pdone = true;
@@ -52,55 +52,27 @@ pw.on('error', function (e) {
 });
 var pl = ['one', 'two', 'three'];
 pl.type = 'parallel';
-pw.pump(pl, 'A', 'B', 'C');
+pl.repeat = 2;
+//pw.pump(pl, 'A', 'B', 'C');
 //show();
 pw.pump(['one', { event: 'two', repeat: 10 }, 'three'], 'D', 'E', 'F');
-pw.pump({ events: ['one2', 'two2', 'three2'], type: 'parallel' }, 'a', 'b', 'c');
+//pw.pump({ events: ['one2', 'two2', 'three2'], type: 'parallel' }, 'a', 'b', 'c');
 function show() {
     console.log('ticking');
     if (!pdone)
         defer(show);
 }
-/**
- * Emits event(s) after a given number of events are received
- * 
- * @param evt the event that will be emitted after the provided events are fired
- * @param evts the events to wait for emission
- * @param args the arguments that will be propagated to the emitter
- * @param fn the function.length that will be used to determine the starting index of the args
- * @param async true asynchronous emission, false for synchronous emission
- */
-function infuse(pw, opts, evts, args, fn) {
-    var iv = catheter(pw, opts, args && fn ? Array.prototype.slice.call(args, fn.length) : null);
-    iv.pump(evts, iv.args.length);
-}
-
-function asyncd(pw, evts, fname, args, fn) {
-    args = Array.prototype.slice.call(args || arguments, fn ? fn.length : asyncd.length);
-    var es = Array.isArray(evts) ? evts : [evts];
-    for (var i = 0; i < es.length; i++) {
-        if (es[i]) {
-            defer(asyncCb.bind(es[i]));
-        }
-    }
-    function asyncCb() {
-        pw[fname].apply(pw, [this].concat(args));
-    }
-}
-function Callback(cb, pw) {
-    
-}
 
 function PulseEmitter(options) {
-    var pw = this, opts = catheter.merge({ endEvent: 'end', errorEvent: 'error' }, options);
-    events.EventEmitter.call(pw);
-    pw.on = function on() {
-        var args = Array.prototype.slice.call(arguments, 0);
-        var rc = args[1] && typeof args[1] === 'function' ? 1 : 0;
-        var cb = args.splice(1, rc, function pulseListener(evt) {
+    var opts = catheter.merge({ endEvent: 'end', errorEvent: 'error' }, options, true);
+    events.EventEmitter.call(this);
+    PulseEmitter.prototype.addListener = function addListener() {
+        var args = Array.prototype.slice.call(arguments, 0), pw = this;
+        var rc = args[1] && typeof args[1] === 'function' ? 1 : 0, cb;
+        var fn = function pulseListener(evt) {
             //try {
                 //if (cb) {
-                cb.apply(this, arguments);
+                    cb.apply(this, arguments);
                 //} else if (true) {
                 //    evt.data.push('');
                 //}
@@ -109,27 +81,43 @@ function PulseEmitter(options) {
                 //throw e;
                 //pw.error(e);
             //}
-        })[0];
-        PulseEmitter.super_.prototype.on.apply(pw, args);
+        };
+        cb = args.splice(1, rc, fn)[0];
+        fn._callback = cb;
+        return PulseEmitter.super_.prototype.addListener.apply(pw, args);
     };
-    pw.error = function error(err, async, fail, ignore) {
+    PulseEmitter.prototype.on = PulseEmitter.prototype.addListener;
+    PulseEmitter.prototype.listeners = function listeners(type) {
+        for (var i = 0, ls = PulseEmitter.super_.prototype.listeners.call(this, type), l = ls.length; i < l; i++) {
+            if (ls[i]._callback) ls.splice(i, 1, ls[i]._callback);
+        }
+        return ls;
+    };
+    PulseEmitter.prototype.removeListener = function removeListener(type, listener) {
+        for (var i = 0, ls = PulseEmitter.super_.prototype.listeners.call(this, type), l = ls.length; i < l; i++) {
+            if (ls[i]._callback === listener) {
+                return PulseEmitter.super_.prototype.removeListener.call(this, type, ls[i]);
+            }
+        }
+    };
+    PulseEmitter.prototype.error = function error(err, async, fail, ignore) {
         if (err && (!ignore || err.code !== ignore)) {
-            var args = Array.prototype.slice.call(arguments, pw.error.length);
-            (async ? pw.emitAsync : pw.emit).apply(pw, ['error', err].concat(args));
+            var args = Array.prototype.slice.call(arguments, this.error.length);
+            (async ? this.emitAsync : this.emit).apply(this, ['error', err].concat(args));
             if (fail) {
-                (async ? pw.emitAsync : pw.emit).apply(pw, ['end', err].concat(args));
+                (async ? this.emitAsync : this.emit).apply(this, ['end', err].concat(args));
             }
             return err;
         }
     };
-    pw.emitAsync = function emitAsync(evts) {
-        asyncd(pw, evts, 'emit', arguments, pw.emitAsync);
+    PulseEmitter.prototype.emitAsync = function emitAsync(evts) {
+        asyncd(this, evts, 'emit', arguments, this.emitAsync);
     };
-    pw.after = function after(evts) {
-        infuse(pw, opts, evts);
+    PulseEmitter.prototype.after = function after(evts) {
+        infuse(this, opts, evts);
     };
-    pw.pump = function pump(evts) {
-        infuse(pw, opts, evts, arguments, pw.pump);
+    PulseEmitter.prototype.pump = function pump(evts) {
+        infuse(this, opts, evts, arguments, this.pump);
     };
     //pw.data = function dataFunc(fn) {
     //    return function data(evt) {
@@ -247,6 +235,43 @@ function PathEmitter(skipper) {
                 
         }
     });
+}
+
+/**
+ * Emits event(s) after a given number of events are received
+ * 
+ * @param evt the event that will be emitted after the provided events are fired
+ * @param evts the events to wait for emission
+ * @param args the arguments that will be propagated to the emitter
+ * @param fn the function.length that will be used to determine the starting index of the args
+ * @param async true asynchronous emission, false for synchronous emission
+ * @returns the pumped I.V.
+ */
+function infuse(pw, opts, evts, args, fn) {
+    var iv = catheter(pw, opts, args && fn ? Array.prototype.slice.call(args, fn.length) : null);
+    return iv.pump(evts, iv.args.length);
+}
+
+/**
+ * Executes one or more events an asynchronously
+ * 
+ * @param pw the pulse emitter
+ * @param evts the event or array of events
+ * @param fname the function name to execute on the pulse emitter
+ * @param args the arguments to pass into the pulse emitter function
+ * @param fn an optional function whose arity is used to determine the starting index of the arguments that will be passed
+ */
+function asyncd(pw, evts, fname, args, fn) {
+    args = Array.prototype.slice.call(args || arguments, fn ? fn.length : asyncd.length);
+    var es = Array.isArray(evts) ? evts : [evts];
+    for (var i = 0; i < es.length; i++) {
+        if (es[i]) {
+            defer(asyncCb.bind(es[i]));
+        }
+    }
+    function asyncCb() {
+        pw[fname].apply(pw, [this].concat(args));
+    }
 }
 
 /**
