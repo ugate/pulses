@@ -3,8 +3,8 @@
 var util = require('util');
 var fs = require('fs');
 var path = require('path');
-var stream = require('stream');
 var events = require('events');
+var platelets = require('./lib/platelets.js');
 var catheter = require('./lib/catheter.js');
 
 util.inherits(PulseEmitter, events.EventEmitter);
@@ -13,61 +13,13 @@ util.inherits(PathEmitter, PulseEmitter);
 var pulses = exports;
 pulses.PulseEmitter = PulseEmitter;
 pulses.PathEmitter = PathEmitter;
-pulses.mergeObject = catheter.merge;
-
-var pw = new PulseEmitter(), pdone = false;
-pw.on('one', function (artery, pulse, a, b, c) {
-    artery.data.push(pulse.event);
-    console.log('%s, %s, %s, %s', util.inspect(artery), util.inspect(pulse), a, b, c);
-});
-pw.on('two', function (artery, pulse, a, b, c) {
-    artery.data.push(pulse.event);
-    console.log('%s, %s, %s, %s', util.inspect(artery), util.inspect(pulse), a, b, c);
-    //pw.emit('error', new Error('test error'));
-});
-pw.on('three', function (artery, pulse, a, b, c) {
-    artery.data.push(pulse.event);
-    console.log('%s, %s, %s, %s', util.inspect(artery), util.inspect(pulse), a, b, c);
-});
-pw.on('one2', function (artery, pulse, a, b, c) {
-    artery.data.push(pulse.event);
-    console.log('%s, %s, %s, %s', util.inspect(artery), util.inspect(pulse), a, b, c);
-});
-pw.on('two2', function (artery, pulse, a, b, c) {
-    artery.data.push(pulse.event);
-    console.log('%s, %s, %s, %s', util.inspect(artery), util.inspect(pulse), a, b, c);
-    //pw.emit('error', new Error('test error'));
-});
-pw.on('three2', function (artery, pulse, a, b, c) {
-    artery.data.push(pulse.event);
-    console.log('%s, %s, %s, %s', util.inspect(artery), util.inspect(pulse), a, b, c);
-});
-pw.on('end', function (artery, pulse, a, b, c) {
-    artery.data.push(pulse.event)
-    console.log('%s, %s, %s, %s', util.inspect(artery), util.inspect(pulse), a, b, c);
-    if (artery.isAsync) {
-        pdone = true;
-    }
-});
-pw.on('error', function (e) {
-    console.log(e);
-});
-var pl = ['one', 'two', 'three'];
-pl.type = 'parallel';
-pl.repeat = 2;
-//pw.pump(pl, 'A', 'B', 'C');
-//show();
-pw.pump(['one', { event: 'two', repeat: 10 }, 'three'], 'D', 'E', 'F');
-//pw.pump({ events: ['one2', 'two2', 'three2'], type: 'parallel' }, 'a', 'b', 'c');
-function show() {
-    console.log('ticking');
-    if (!pdone)
-        defer(show);
-}
+pulses.mergeObject = platelets.merge;
 
 function PulseEmitter(options) {
-    var opts = catheter.merge({ endEvent: 'end', errorEvent: 'error' }, options, true);
+    var opts = platelets.merge({ endEvent: 'end', errorEvent: 'error' }, options, true);
     events.EventEmitter.call(this);
+    this.endEvent = opts.endEvent;
+    this.errorEvent = opts.errorEvent;
     PulseEmitter.prototype.addListener = function addListener() {
         var args = Array.prototype.slice.call(arguments, 0), pw = this;
         var rc = args[1] && typeof args[1] === 'function' ? 1 : 0, cb;
@@ -113,7 +65,7 @@ function PulseEmitter(options) {
         }
     };
     PulseEmitter.prototype.emitAsync = function emitAsync(evts) {
-        asyncd(this, evts, 'emit', arguments, this.emitAsync);
+        platelets.asyncd(this, evts, 'emit', arguments, this.emitAsync);
     };
     PulseEmitter.prototype.after = function after(evts) {
         infuse(this, opts, evts);
@@ -251,59 +203,5 @@ function PathEmitter(skipper) {
  */
 function infuse(pw, opts, evts, args, fn) {
     var iv = catheter(pw, opts, args && fn ? Array.prototype.slice.call(args, fn.length) : null);
-    return iv.pump(evts, iv.args.length);
-}
-
-/**
- * Executes one or more events an asynchronously
- * 
- * @param pw the pulse emitter
- * @param evts the event or array of events
- * @param fname the function name to execute on the pulse emitter
- * @param args the arguments to pass into the pulse emitter function
- * @param fn an optional function whose arity is used to determine the starting index of the arguments that will be passed
- */
-function asyncd(pw, evts, fname, args, fn) {
-    args = Array.prototype.slice.call(args || arguments, fn ? fn.length : asyncd.length);
-    var es = Array.isArray(evts) ? evts : [evts];
-    for (var i = 0; i < es.length; i++) {
-        if (es[i]) {
-            defer(asyncCb.bind(es[i]));
-        }
-    }
-    function asyncCb() {
-        pw[fname].apply(pw, [this].concat(args));
-    }
-}
-
-/**
- * Defers a function's execution to the next iteration in the event loop
- * 
- * @param cb the callback function
- * @returns the callback's return value
- */
-function defer(cb) {
-    if (!defer.nextLoop) {
-        var ntv = typeof setImmediate === 'function';
-        defer.nextLoop = ntv ? setImmediate : function setImmediateShim(cb) {
-            if (defer.obj) {
-                if (!defer.cbs.length) {
-                    defer.obj.setAttribute('cnt', 'inc');
-                }
-                defer.cbs.push(cb);
-            } else {
-                setTimeout(cb, 0);
-            }
-        };
-        if (!ntv && typeof MutationObserver === 'object' && typeof document === 'object') {
-            defer.cbs = [];
-            defer.obj = document.createElement('div');
-            defer.ob = new MutationObserver(function mutations() {
-                for (var cbl = defer.cbs.slice(), i = defer.cbs.length = 0, l = cbl.length; i < l; i++) {
-                    cbl[i]();
-                }
-            }).observe(defer.obj, { attributes: true });
-        }
-    }
-    return defer.nextLoop(cb);
+    return iv.pump(evts, true);
 }
