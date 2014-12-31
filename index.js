@@ -4,8 +4,8 @@ var util = require('util');
 var fs = require('fs');
 var path = require('path');
 var events = require('events');
-var platelets = require('./lib/platelets.js');
-var catheter = require('./lib/catheter.js');
+var plet = require('./lib/platelets.js');
+var cat = require('./lib/catheter.js');
 
 util.inherits(PulseEmitter, events.EventEmitter);
 util.inherits(PathEmitter, PulseEmitter);
@@ -13,81 +13,160 @@ util.inherits(PathEmitter, PulseEmitter);
 var pulses = exports;
 pulses.PulseEmitter = PulseEmitter;
 pulses.PathEmitter = PathEmitter;
-pulses.mergeObject = platelets.merge;
+pulses.mergeObject = plet.merge;
 
+/**
+ * Basis for an {EventEmitter} with control flow operations and asynchronicity
+ * 
+ * @class PulseEmitter
+ * @requires events
+ * @arg {{endEvent: string, errorEvent: string, emitErrors: string}} options the pulse emitter options
+ */
 function PulseEmitter(options) {
-    var opts = platelets.merge({ endEvent: 'end', errorEvent: 'error' }, options, true);
+    var opts = plet.merge({
+        endEvent: 'end', 
+        errorEvent: 'error',
+        emitErrors: false
+    }, options, true);
+    var glb = { pumped: [] };
     events.EventEmitter.call(this);
     this.endEvent = opts.endEvent;
     this.errorEvent = opts.errorEvent;
-    PulseEmitter.prototype.addListener = function addListener() {
-        var args = Array.prototype.slice.call(arguments, 0), pw = this;
-        var rc = args[1] && typeof args[1] === 'function' ? 1 : 0, cb;
-        var fn = function pulseListener(evt) {
-            //try {
-                //if (cb) {
-                    cb.apply(this, arguments);
-                //} else if (true) {
-                //    evt.data.push('');
-                //}
-            //} catch (e) {
-                //e.event = args[0];
-                //throw e;
-                //pw.error(e);
-            //}
-        };
-        cb = args.splice(1, rc, fn)[0];
-        fn._callback = cb;
-        return PulseEmitter.super_.prototype.addListener.apply(pw, args);
-    };
-    PulseEmitter.prototype.on = PulseEmitter.prototype.addListener;
+
+    /**
+     * @inheritdoc
+     */
     PulseEmitter.prototype.listeners = function listeners(type) {
         for (var i = 0, ls = PulseEmitter.super_.prototype.listeners.call(this, type), l = ls.length; i < l; i++) {
             if (ls[i]._callback) ls.splice(i, 1, ls[i]._callback);
         }
         return ls;
     };
+    
+    /**
+     * @inheritdoc
+     */
     PulseEmitter.prototype.removeListener = function removeListener(type, listener) {
         for (var i = 0, ls = PulseEmitter.super_.prototype.listeners.call(this, type), l = ls.length; i < l; i++) {
             if (ls[i]._callback === listener) {
                 return PulseEmitter.super_.prototype.removeListener.call(this, type, ls[i]);
             }
         }
+        return this;
     };
-    PulseEmitter.prototype.error = function error(err, async, fail, ignore) {
-        if (err && (!ignore || err.code !== ignore)) {
+    
+    /**
+     * @inheritdoc
+     */
+    PulseEmitter.prototype.addListener = function addListener(type, listener) {
+        return listen(this, opts, type, listener);
+    };
+    
+    /**
+     * @inheritdoc
+     */
+    PulseEmitter.prototype.on = PulseEmitter.prototype.addListener;
+    
+    /**
+     * Same as `on` and `addListener` counterparts except the only events emitted with be events emitted via `pump`
+     *
+     * @arg {string} type the event type
+     * @arg {function(artery, pulse)} listener the listener function
+     * @returns {PulseEmitter} the pulse emitter
+     */
+    PulseEmitter.prototype.at = function at(type, listener) {
+        return listen(this, opts, type, listener, true);
+    };
+
+    /**
+     * Handles errors by emitting the corresponding event(s)
+     * 
+     * @emits the error event set in the pulse emitter's options (default: "error") passing in the {Error} in error listeners
+     * @arg {Error} err the error to emit proceeded by an end event when "end" is true
+     * @arg {boolean} async true to emit the error asynchronously
+     * @arg {boolean} end true to emit the end event set in the pulse emitter's options (default: "end")
+     * @arg {Array} ignores optional array of error.code that will be ignored
+     * @returns {Error} the error when emission has occurred
+     */
+    PulseEmitter.prototype.error = function error(err, async, end, ignore) {
+        if (err && (!ignores || !err.code || !!~ignores.indexOf(err.code))) {
             var args = Array.prototype.slice.call(arguments, this.error.length);
-            (async ? this.emitAsync : this.emit).apply(this, ['error', err].concat(args));
-            if (fail) {
-                (async ? this.emitAsync : this.emit).apply(this, ['end', err].concat(args));
+            (async ? this.emitAsync : this.emit).apply(this, [opts.errorEvent, err].concat(args));
+            if (end) {
+                (async ? this.emitAsync : this.emit).apply(this, [opts.endEvent, err].concat(args));
             }
             return err;
         }
     };
+    
+    /**
+     * Emits asynchronously using `setImmediate` or `MutationObserver` in browsers that do not support `setImmediate`
+     * 
+     * @arg {array} an array of event types to emit
+     * @returns {PulseEmitter} the pulse emitter
+     */
     PulseEmitter.prototype.emitAsync = function emitAsync(evts) {
-        platelets.asyncd(this, evts, 'emit', arguments, this.emitAsync);
+        return plet.asyncd(this, evts, 'emit', arguments, this.emitAsync);
     };
+    
+    /**
+     * Emits after all the supplied event types have been emitted
+     * 
+     * @arg {array} an array of event types to wait for emission
+     * @returns {PulseEmitter} the pulse emitter
+     */
     PulseEmitter.prototype.after = function after(evts) {
         infuse(this, opts, evts);
+        return this;
     };
+    
+    /**
+     * Pumps a set of events into a control flow sequence
+     * 
+     * @arg {array | object} the pulse events with or w/o control flow properties, each item can be an event type string or an object with control properties
+     * @returns {PulseEmitter} the pulse emitter
+     */
     PulseEmitter.prototype.pump = function pump(evts) {
         infuse(this, opts, evts, arguments, this.pump);
     };
-    //pw.data = function dataFunc(fn) {
-    //    return function data(evt) {
-    //        evt.callback
-    //    };
-    //    var iv = catheter(true, arguments);
-    //    callbacked('error', pw, iv);
-    //    return callbacked(evt, pw, iv);
-    //};
+}
+
+/**
+ * Listens for incoming events using event emitter's add listener function, but with optional error handling and pulse event only capabilities
+ * 
+ * @private
+ * @arg {PulseEmitter} pw the pulse emitter
+ * @arg {object} opts the pulse emitter options
+ * @arg {string} type the event type
+ * @arg {function} listener the function to execute when the event type is emitted
+ * @arg {boolean} at true to only execute the listener when the event is coming from a pump execution
+ * @returns {PulseEmitter} the pulse emitter
+ */
+function listen(pw, opts, type, listener, at) {
+    var fn = function pulseListener(artery, pulse) {
+        if (at && !(artery instanceof cat.Artery)) {
+            return; // not a pulse event
+        }
+        if (opts.emitErrors) {
+            try {
+                return listener.apply(this, arguments);
+            } catch (e) {
+                e.artery = artery;
+                e.pulse = pulse;
+                return pw.error(e);
+            }
+        }
+        return listener.apply(this, arguments);
+    };
+    fn._callback = listener;
+    return PulseEmitter.super_.prototype.addListener.call(pw, type, fn);
 }
 
 /**
  * Traverses a series of paths
  * 
- * @constructor
- * @param skipper an optional exclusionary regular expression or function(path) w/return value used to determine if a path will be skipped
+ * @class PathEmitter
+ * @arg {RegExp} skipper an optional exclusionary regular expression or function(path) w/return value used to determine if a path will be skipped
  */
 function PathEmitter(skipper) {
     var pw = this, cns = ['stats', 'mkdir'], dirSplit = /[\/\\]+/g;
@@ -194,14 +273,15 @@ function PathEmitter(skipper) {
 /**
  * Emits event(s) after a given number of events are received
  * 
- * @param evt the event that will be emitted after the provided events are fired
- * @param evts the events to wait for emission
- * @param args the arguments that will be propagated to the emitter
- * @param fn the function.length that will be used to determine the starting index of the args
- * @param async true asynchronous emission, false for synchronous emission
+ * @private
+ * @arg {PulseEmitter} pw the pulse emitter
+ * @arg evts the events to wait for emission
+ * @arg args the arguments that will be propagated to the emitter
+ * @arg fn the function.length that will be used to determine the starting index of the args
+ * @arg async true asynchronous emission, false for synchronous emission
  * @returns the pumped I.V.
  */
 function infuse(pw, opts, evts, args, fn) {
-    var iv = catheter(pw, opts, args && fn ? Array.prototype.slice.call(args, fn.length) : null);
+    var iv = cat(pw, opts, args && fn ? Array.prototype.slice.call(args, fn.length) : null);
     return iv.pump(evts, true);
 }
