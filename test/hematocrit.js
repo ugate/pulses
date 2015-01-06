@@ -12,49 +12,58 @@ hematocrit.runDefault = runDefault;
 
 // global properties that are shared between arteries and pulses
 // n == name, d == default value, i == true to inherit value from parent
-var gprops = [{ n: 'type', d: 'series', i: true }, { n: 'repeat', d: 1 }];
+var gprops = [{ n: 'type', d: 'series', i: true }, { n: 'repeat', d: 1 }, { n: 'count', d: 0 }];
 
 function runDefault() {
-    var p1 = ['one', 'two', 'three'];
-    p1.type = 'parallel';
-    p1.repeat = 2;
-    p1.__args = ['A', 'B', 'C'];
-    
-    var p2 = ['one', { event: 'two', repeat: 10 }, 'three'];
-    p2.__args = ['D', 'E', 'F'];
-    
-    var p3 = { events: ['one-2', 'two-2', 'three-2'], type: 'parallel' };
-    p3.__args = ['a', 'b', 'c'];
-    
-    var p4 = { events: ['one-3', 'two-3', { event: 'three-3', type: 'series' }, { event: 'four-3', type: 'series' }], type: 'parallel' };
-    p4.__args = ['1', 2, '3', true];
+    var p = [], i = -1;
 
-    run([p1, p2, p3]);
+    p[++i] = ['one', 'two', 'three'];
+    p[i].type = 'parallel';
+    p[i].repeat = 2;
+    p[i].__args = ['A', 'B', 'C'];
+    
+    p[++i] = ['one', { event: 'two', repeat: 5 }, 'three'];
+    p[i].repeat = 2;
+    p[i].__args = ['D', 'E', 'F'];
+    
+    p[++i] = { events: ['one-2', 'two-2', 'three-2'], type: 'parallel' };
+    p[i].__args = ['a', 'b', 'c'];
+    
+    p[++i] = { events: ['one-3', 'two-3', { event: 'three-3', type: 'series' }, { event: 'four-3', type: 'series' }], type: 'parallel' };
+    p[i].__args = ['1', 2, '3', true];
+
+    run(p);
 }
 
-function listen(evt, i, p, glb, tst, pump) {
-    var evtObj = globalProps(evt, pump);
-    tst.pw.at(evtObj.event, function testListener(artery, pulse) {
-        tst.cbs[evtObj.event] = (tst.cbs[evtObj.event] || 0) + 1;
-        if (!glb[p]) {
-            glb[p] = artery;
-        }
+function listen(evt, i, p, arteries, tst) {
+    var pulset = props(evt, tst.artery), cbcnt = 0;
+    tst.pw.at(pulset.event, function testListener(artery, pulse) {
+        console.log('%s', [util.inspect(artery), util.inspect(pulse)].concat(args));
+        cbcnt++;
+        var isEnd = pulset.event === tst.pw.endEvent;
+
+        // update test values according to callback iteration
+        tst.cnts[pulset.event] = (tst.cnts[pulset.event] || 0) + 1;
+        tst.artery.count = (tst.artery.count || 1) + (isEnd || cbcnt > tst.ttl ? 1 : 0);
+        pulset.count = (pulset.count || 0) + 1;
+        var bi = bleeding(artery, p, arteries);
         
         // artery
-        globalProps(artery, pump, 'artery');
+        props(artery, tst.artery, 'artery', 'arteryTest');
+        assert.ok(bi === p, 'Artery is not isolated to the pump at index ' + p + ' (found at: ' + bi + '): ' + util.inspect(artery));
         assert.ok(Array.isArray(artery.data));
-        assert.strictEqual(artery, glb[p]);
         
         // pulse
-        globalProps(pulse, evtObj, 'pulse');
-        assert.strictEqual(pulse.event, evtObj.event);
+        props(pulse, pulset, 'pulse', 'pulseTest');
+        assert.strictEqual(pulse.event, pulset.event);
         
         // ensure the number of emissions equals the number of callbacks
-        var xecnt = tst.emits[evtObj.event], isEnd = evtObj.event === tst.pw.endEvent;
-        var offset = isEnd ? pump.repeat - 1 : 0, xccnt = offset + tst.cbs[evtObj.event];
+        /*var xecnt = tst.emits[pulset.event];
+        tst.offset += isEnd ? tst.artery.repeat - 1 : 0;
+        var xccnt = tst.offset + tst.cbs[pulset.event];
         assert.strictEqual(artery.count + pulse.count, xecnt + xccnt, pulse.event + ' (artery.count: ' + artery.count + 
             ' + pulse.count: ' + pulse.count + ') !== (test emit count: ' + xecnt + ' + test callback count: ' + 
-            (xccnt - offset) + ')');
+            (xccnt - tst.offset) + ')');*/
         
         // artery data integrity
         var dcnt = i + 1;
@@ -64,14 +73,29 @@ function listen(evt, i, p, glb, tst, pump) {
         // arguments carried over?
         var args = Array.prototype.slice.call(arguments, 2);
         assert.deepEqual(args, tst.args, 'listener arguments: "' + args + '" != expected arguments: "' + tst.args + '"');
-
-        console.log('%s', [util.inspect(artery), util.inspect(pulse)].concat(args));
+        
+        // reset pulse test count in case there are artery repeates
+        pulset.count = isEnd ? 0 : pulset.count;
     });
-    tst.emits[evtObj.event] = (tst.emits[evtObj.event] || 0) + 1;
-    return evtObj.event === tst.pw.endEvent;
+    tst.ttl += pulset.repeat;
+    tst.emits[pulset.event] = (tst.emits[pulset.event] || 0) + 1;
+    return pulset.event === tst.pw.endEvent;
 }
 
-function globalProps(o, other, nm) {
+function bleeding(artery, p, arteries) {
+    if (!arteries[p]) {
+        arteries[p] = artery;
+    } else {
+        for (var a in arteries) {
+            if (arteries[a] === artery && a !== p) {
+                return a << 0;
+            }
+        }
+    }
+    return p;
+}
+
+function props(o, other, nm, onm) {
     var asrt = nm && other;
     if (asrt) {
         assert.ok(o, 'no ' + nm);
@@ -82,26 +106,33 @@ function globalProps(o, other, nm) {
     while (i--) {
         if (asrt) {
             assert.strictEqual(o[gprops[i].n], other[gprops[i].n], 
-                (nm ? nm + '.' : '') + gprops[i].n + ': ' + o[gprops[i].n] + ' !== ' + other[gprops[i].n]);
-        } else if (typeof o[gprops[i].n] === 'undefined') {
-            o[gprops[i].n] = (other && gprops[i].i && other[gprops[i].n]) || gprops[i].d;
+                (nm ? nm + '.' : '') + gprops[i].n + ': ' + o[gprops[i].n] + ' !== ' + 
+                (onm ? onm + '.' : '') + gprops[i].n + ': ' + other[gprops[i].n]);
+        } else {
+            propSet(other, gprops[i]);
+            propSet(o, gprops[i], other);
         }
         
     }
     return o;
 }
 
+function propSet(o, gp, other) {
+    if (o && typeof o[gp.n] === 'undefined') {
+        o[gp.n] = (other && gp.i && other[gp.n]) || gp.d;
+    }
+}
+
 function run(pumps, opts, tests) {
-    var tsts = tests || [], pump, glb = [], tst, hasEnd;
+    var tsts = tests || [], arteries = [], tst, hasEnd;
     for (var p = 0, pl = pumps.length; p < pl; p++, hasEnd = false) {
         if (!tests) {
-            pump = globalProps(pumps[p]);
-            tsts.push(tst = new Test(opts, pump.__args));
-            for (var t = 0, pe = pump.events || pump, tl = pe.length; t < tl; t++) {
-                hasEnd = listen(pe[t], t, p, glb, tst, pump) || hasEnd;
+            tsts.push(tst = new Test(opts, props(pumps[p]), pl));
+            for (var t = 0, pe = tst.artery.events || tst.artery, tl = pe.length; t < tl; t++) {
+                hasEnd = listen(pe[t], t, p, arteries, tst) || hasEnd;
             }
             if (!hasEnd) {
-                listen(tst.pw.endEvent, t, p, glb, tst, pump);
+                listen(tst.pw.endEvent, t, p, arteries, tst);
             }
         } else {
             tsts[p].pw.pump.apply(tsts[p].pw, [pumps[p]].concat(pumps[p].__args));
@@ -112,12 +143,15 @@ function run(pumps, opts, tests) {
     }
 }
 
-function Test(opts, args) {
+function Test(opts, artery, ttl) {
     this.pw = new PulseEmitter(opts);
     this.hasEndEvent = true;
-    this.args = args;
+    this.artery = artery;
+    this.args = artery.__args;
+    this.ttl = ttl;
+    this.offset = 0;
     this.emits = {};
-    this.cbs = {};
+    this.cnts = {};
     this.tick = function tick() {
         console.log('ticking');
         //if (this.e.length <= this.q.length) plet.defer(this.tick);
