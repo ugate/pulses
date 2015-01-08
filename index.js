@@ -28,7 +28,6 @@ function PulseEmitter(options) {
         errorEvent: 'error',
         emitErrors: false
     }, options, true);
-    var glb = { pumped: [] };
     events.EventEmitter.call(this);
     this.endEvent = opts.endEvent;
     this.errorEvent = opts.errorEvent;
@@ -65,6 +64,13 @@ function PulseEmitter(options) {
     /**
      * @inheritdoc
      */
+    PulseEmitter.prototype.once = function once(type, listener) {
+        return listen(this, opts, type, listener, 'once');
+    };
+    
+    /**
+     * @inheritdoc
+     */
     PulseEmitter.prototype.on = PulseEmitter.prototype.addListener;
     
     /**
@@ -75,7 +81,7 @@ function PulseEmitter(options) {
      * @returns {PulseEmitter} the pulse emitter
      */
     PulseEmitter.prototype.at = function at(type, listener) {
-        return listen(this, opts, type, listener, true);
+        return listen(this, opts, type, listener, null, true);
     };
 
     /**
@@ -139,27 +145,33 @@ function PulseEmitter(options) {
  * @arg {object} opts the pulse emitter options
  * @arg {string} type the event type
  * @arg {function} listener the function to execute when the event type is emitted
+ * @arg {string} fnm the optional function name that will be called on the pulse emitter (default: _addListener_)
  * @arg {boolean} at true to only execute the listener when the event is coming from a pump execution
  * @returns {PulseEmitter} the pulse emitter
  */
-function listen(pw, opts, type, listener, at) {
+function listen(pw, opts, type, listener, fnm, at) {
     var fn = function pulseListener(artery, pulse) {
         if (at && !(artery instanceof cat.Artery)) {
             return; // not a pulse event
         }
-        if (opts.emitErrors) {
+        if (pulse.emitErrors || (pulse.emitErrors !== false && artery.emitErrors) || 
+            (pulse.emitErrors !== false && artery.emitErrors !== false && opts.emitErrors)) {
             try {
                 return listener.apply(this, arguments);
             } catch (e) {
-                e.artery = artery;
-                e.pulse = pulse;
+                e.emitter = {
+                    listener: listener,
+                    artery: artery,
+                    pulse: pulse,
+                    arguments: Array.prototype.slice.apply(arguments, fn.length)
+                };
                 return pw.error(e);
             }
         }
         return listener.apply(this, arguments);
     };
     fn._callback = listener;
-    return PulseEmitter.super_.prototype.addListener.call(pw, type, fn);
+    return PulseEmitter.super_.prototype[fnm || 'addListener'].call(pw, type, fn);
 }
 
 /**
