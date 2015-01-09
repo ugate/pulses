@@ -19,7 +19,28 @@ var maxTestMsDflt = 1000;
 // n == name, d == default value, i == true to inherit value from parent
 var gprops = [{ n: 'type', d: 'series', i: true }, { n: 'repeat', d: 1 }, { n: 'count', d: 0 }];
 
-function runDefault() {
+/**
+ * Runs one or more tests against the supplied array of pulse emitter events
+ *
+ * @see {@link PulseEmitter#pump}
+ * @arg {(Object | Array)} [options={}] the options or an array that represents the options.tests
+ * @arg {Array} [options.tests] an array of pulse emitter test cases each of which will be passed into a newly generated pulse emitter's pump
+ * @arg {function} [options.listener] an optional function that will be called on every pulse emitter emission
+ * @arg {Integer} [options.maxWaitMs] maximum number of millisecods to wait for the tests to complete (in case events are not emitted)
+ * @arg {Object} emOpts the options passed to generated pulse emitters
+ */
+function run(options, emOpts) {
+    new Oximeter(options).begin(options.tests || options, emOpts);
+}
+
+/**
+ * Requires each of the files within the "cases" directory and appends them as test cases. If the file exports a function the function will
+ * be called and should return an array or object that will be appended to the commulative test cases.
+ * 
+ * @see {@link run}
+ * @arg {Object} [options={}] the run options minus the test cases
+ */
+function runDefault(options) {
     var cpth = path.join(__dirname, 'cases');
     fs.readdir(cpth, function caseDir(err, files) {
         if (err) {
@@ -35,22 +56,10 @@ function runDefault() {
                 p.push(f);
             }
         }
-        run({ tests: p });
+        var o = plet.merge({}, options);
+        o.tests = p;
+        run(o);
     });
-}
-
-/**
- * Runs one or more tests against the supplied array of pulse emitter events
- *
- * @see {PulseEmitter#pump}
- * @arg {(Object | Array)} [options={}] the options or an array that represents the options.tests
- * @arg {Array} [options.tests] an array of pulse emitter test cases each of which will be passed into a newly generated pulse emitter's pump
- * @arg {function} [options.listener] an optional function that will be called on every pulse emitter emission
- * @arg {Integer} [options.maxWaitMs] maximum number of millisecods to wait for the tests to complete (in case events are not emitted)
- * @arg {Object} emOpts the options passed to generated pulse emitters
- */
-function run(options, emOpts) {
-    new Oximeter(options).begin(options.tests || options, emOpts);
 }
 
 function detect(diode) {
