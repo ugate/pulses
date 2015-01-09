@@ -2,11 +2,15 @@
 
 var assert = require('assert');
 var util = require('util');
+var path = require('path');
+var fs = require('fs');
 var plet = require('../lib/platelets');
 var pulses = require('../');
 var PulseEmitter = pulses.PulseEmitter;
 
 // node -e "require('./test/oximetry').runDefault()"
+// node -e "require('./test/oximetry')(require('./test/cases/prog.test')())"
+// node -e "require('./test/oximetry')([require('./test/cases/repeat.complex.json')])"
 var oximetry = module.exports = run;
 oximetry.runDefault = runDefault;
 
@@ -16,44 +20,43 @@ var maxTestMsDflt = 1000;
 var gprops = [{ n: 'type', d: 'series', i: true }, { n: 'repeat', d: 1 }, { n: 'count', d: 0 }];
 
 function runDefault() {
-    var p = [], i = -1;
-
-    p[++i] = ['one', 'two', 'three'];
-    p[i].type = 'parallel';
-    p[i].repeat = 2;
-    p[i].__args = ['A', 'B', 'C'];
-    
-    p[++i] = ['one', { event: 'two', repeat: 5 }, 'three'];
-    p[i].repeat = 2;
-    p[i].__args = ['D', 'E', 'F'];
-    
-    p[++i] = { events: ['one-2', 'two-2', 'three-2'], type: 'parallel' };
-    p[i].__args = ['a', 'b', 'c'];
-    
-    p[++i] = { events: ['one-3', 'two-3', { event: 'three-3', type: 'series' }, { event: 'four-3', type: 'series' }], type: 'parallel' };
-    p[i].__args = ['1', 2, '3', true];
-
-    run({ tests: p });
+    var cpth = path.join(__dirname, 'cases');
+    fs.readdir(cpth, function caseDir(err, files) {
+        if (err) {
+            throw err;
+        }
+        files.sort();
+        var p = [];
+        for (var i = 0, l = files.length, f; i < l; i++) {
+            f = require(path.join(cpth, files[i]));
+            if (typeof f === 'function') {
+                p = p.concat(f());
+            } else {
+                p.push(f);
+            }
+        }
+        run({ tests: p });
+    });
 }
 
 /**
  * Runs one or more tests against the supplied array of pulse emitter events
  *
  * @see {PulseEmitter#pump}
- * @arg {Object} [options={}] the options
+ * @arg {(Object | Array)} [options={}] the options or an array that represents the options.tests
  * @arg {Array} [options.tests] an array of pulse emitter test cases each of which will be passed into a newly generated pulse emitter's pump
  * @arg {function} [options.listener] an optional function that will be called on every pulse emitter emission
  * @arg {Integer} [options.maxWaitMs] maximum number of millisecods to wait for the tests to complete (in case events are not emitted)
- * @arg {Object} pulseEmitterOpts the options passed to new pulse emitters
+ * @arg {Object} emOpts the options passed to generated pulse emitters
  */
-function run(options, pulseEmitterOpts) {
-    new Oximeter(options).start(options.tests, pulseEmitterOpts);
+function run(options, emOpts) {
+    new Oximeter(options).begin(options.tests || options, emOpts);
 }
 
 function detect(diode) {
     var probe = diode.probe;
     probe.emitter.at(diode.heme.event, function testListener(artery, pulse) {
-        var args = Array.prototype.slice.call(arguments, testListener.length);
+        var args = arguments.length > testListener.length ? Array.prototype.slice.call(arguments, testListener.length) : undefined;
         console.log('%s', [util.inspect(artery), util.inspect(pulse)].concat(args));
         
         // update test values according to callback iteration
@@ -74,6 +77,8 @@ function detect(diode) {
         
         // arguments carried over?
         assert.deepEqual(args, probe.args, 'listener arguments: "' + args + '" != expected arguments: "' + probe.args + '"');
+        
+        // TODO : add event order assertion
 
         if (probe.oxm.listener) {
             probe.oxm.listener(diode);
@@ -115,13 +120,15 @@ function Oximeter(opts) {
     var rds = { exp: 0, act: 0 };
     oxm.listener = opts.listener;
     oxm.arteries = [];
-    oxm.start = function start(hemo, opts) {
+    oxm.begin = function begin(hemo, emOpts) {
+        banner('listening');
         for (var p = 0, pl = hemo.length; p < pl; p++) {
-            activate(props(hemo[p]), opts);
+            activate(props(hemo[p]), emOpts);
         }
         iid = setTimeout(validate, maxWaitMs);
+        start();
         for (var i = 0, l = probes.length; i < l; i++) {
-            probes[i].emitter.pump.apply(probes[i].emitter, [hemo[i]].concat(hemo[i].__args));
+            probes[i].emitter.pump.apply(probes[i].emitter, hemo[i].__args ? [hemo[i]].concat(hemo[i].__args) : [hemo[i]]);
         }
         return probes.length;
     };
@@ -130,24 +137,35 @@ function Oximeter(opts) {
         if (!rds[id]) {
             rds[id] = { exp: 0, act: 0 };
         }
-        rds[t] += rds[id][t] += v;
-        console.log(id + '... exp: ' + rds[id].exp + ' act: ' + rds[id].act + ' (' + rds.exp + '/' + rds.act + ')');
+        rds[id][t] += v;
+        rds[t] += v;
+        console.log(id + ': exp ' + rds[id].exp + ' act ' + rds[id].act + ' (' + rds.exp + '/' + rds.act + ')');
         if (chk && rds.act >= rds.exp) {
             clearTimeout(iid);
             validate(true);
         }
     };
     function validate(forced) {
-        assert.ok(rds.exp > 0, 'No tests to run');
+        assert.ok(rds.exp > 0, 'Nothing ran');
         assert.ok(rds.act > 0, 'Expected ' + rds.exp + ' to run, but nothing ran');
         for (var id in rds) {
-            assert.strictEqual(rds[id].act, rds[id].exp, 'Expected ' + rds[id].exp + ' ' + id + ', but found ' + 
+            assert.strictEqual(rds[id].act, rds[id].exp, id + ' expected ' + rds[id].exp + ', but found ' + 
                 rds[id].act + (forced ? '' : ' after waiting for ' + maxWaitMs + ' ms'));
         }
+        stop();
     }
-    function activate(hemo, opts) {
+    function start() {
+        banner('emitting');
+        rds.start = process.hrtime();
+    }
+    function stop() {
+        rds.finish = process.hrtime(rds.start);
+        rds.ms = (rds.finish[0] * 1e9 + rds.finish[1]) / 1000000;
+        banner('Completed %s/%s tests in %s ms', rds.act, rds.exp, rds.ms);
+    }
+    function activate(hemo, emOpts) {
         hemo.count = 1; // override default count
-        var probe = new Probe(oxm, probes.length, hemo, opts);
+        var probe = new Probe(oxm, probes.length, hemo, emOpts);
         oxm.arteries.push(hemo);
         probes.push(probe);
         probe.activate();
@@ -156,9 +174,9 @@ function Oximeter(opts) {
     Object.seal(oxm);
 }
 
-function Probe(oxm, index, hemo, opts) {
+function Probe(oxm, index, hemo, emOpts) {
     var probe = this;
-    Object.freeze(probe.emitter = new PulseEmitter(opts));
+    Object.freeze(probe.emitter = new PulseEmitter(emOpts));
     probe.oxm = oxm;
     probe.index = index;
     probe.hasEndEvent = true;
@@ -167,7 +185,7 @@ function Probe(oxm, index, hemo, opts) {
     probe.data = [];
     probe.count = 0;
     probe.last = { pos: -1, cnt: 0, rpt: 0 };
-    probe.marker = 'Test ' + probe.index;
+    probe.marker = 'Test[' + probe.index + ']';
     probe.activate = function activate() {
         var hasEnd = false;
         for (var t = 0, pe = probe.hemo.events || probe.hemo, tl = pe.length; t < tl; t++) {
@@ -178,11 +196,7 @@ function Probe(oxm, index, hemo, opts) {
     };
     probe.read = function read(diode, register) {
         var v = register ? diode.isEnd ? 1 : probe.hemo.repeat * diode.heme.repeat : null;
-        probe.oxm.read(probe.marker + ' ' + diode.marker, register && diode.isEnd, v);
-    };
-    probe.tick = function tick() {
-        console.log('ticking');
-        //if (probe.e.length <= probe.q.length) plet.defer(probe.tick);
+        probe.oxm.read(probe.marker + ' ' + diode.marker, !register && diode.isEnd, v);
     };
     Object.seal(probe);
 }
@@ -194,12 +208,12 @@ function Diode(probe, index, event) {
     diode.index = index;
     diode.isEnd = diode.heme.event === diode.probe.emitter.endEvent;
     diode.count = 0;
-    diode.marker = '"' + diode.heme.event + '"';
+    diode.marker = diode.heme.event + (!!~diode.index ? '[' + diode.index + ']' : '');
     diode.absorb = function absorb(artery, pulse) {
         var plst = diode.probe.last;
         diode.count++;
         diode.probe.count++;
-        var pos = diode.index + 1; //console.log(pos + ' ' + diode.count + ' ' + diode.probe.count);
+        var pos = diode.index + 1;
         if (plst.pos >= 0 && pos === plst.pos && diode.count > plst.cnt) {
             diode.heme.count++;
             plst.rpt++;
@@ -229,4 +243,8 @@ function bleeding(artery, oximeter, index) {
         }
     }
     return Object.freeze({ index: index, other: index });
+}
+
+function banner() {
+    console.log('------------ %s ------------', util.format.apply(util.format, arguments));
 }

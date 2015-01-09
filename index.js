@@ -20,7 +20,10 @@ pulses.mergeObject = plet.merge;
  * 
  * @class PulseEmitter
  * @requires events
- * @arg {{endEvent: string, errorEvent: string, emitErrors: string}} options the pulse emitter options
+ * @arg {Object} [options={}] the pulse emitter options
+ * @arg {String} [options.endEvent=end] the event type/name that will be emitted when a pump has completed
+ * @arg {String} [options.errorEvent=error] the event type/name that will be emitted when an error occurs
+ * @arg {Boolean} [options.emitErrors=false] true to catch errors that occur with listeners and emit an error event for each error encountered
  */
 function PulseEmitter(options) {
     var opts = plet.merge({
@@ -76,8 +79,9 @@ function PulseEmitter(options) {
     /**
      * Same as `on` and `addListener` counterparts except the only events emitted with be events emitted via `pump`
      *
-     * @arg {string} type the event type
-     * @arg {function(artery, pulse)} listener the listener function
+     * @callback listener
+     * @arg {String} type the event type
+     * @arg {listener} listener the listener function(artery, pulse, [...argument])
      * @returns {PulseEmitter} the pulse emitter
      */
     PulseEmitter.prototype.at = function at(type, listener) {
@@ -87,10 +91,10 @@ function PulseEmitter(options) {
     /**
      * Handles errors by emitting the corresponding event(s)
      * 
-     * @emits the error event set in the pulse emitter's options (default: "error") passing in the {Error} in error listeners
+     * @emits the error event set in the pulse emitter's options passing in the {Error} in error listeners
      * @arg {Error} err the error to emit proceeded by an end event when "end" is true
-     * @arg {boolean} async true to emit the error asynchronously
-     * @arg {boolean} end true to emit the end event set in the pulse emitter's options (default: "end")
+     * @arg {Boolean} async true to emit the error asynchronously
+     * @arg {Boolean} end true to emit the end event set in the pulse emitter's options
      * @arg {Array} ignores optional array of error.code that will be ignored
      * @returns {Error} the error when emission has occurred
      */
@@ -108,7 +112,8 @@ function PulseEmitter(options) {
     /**
      * Emits asynchronously using `setImmediate` or `MutationObserver` in browsers that do not support `setImmediate`
      * 
-     * @arg {array} an array of event types to emit
+     * @arg {Array} evts an array of event types to emit
+     * @arg {...*} [arguments] arguments passed into listeners
      * @returns {PulseEmitter} the pulse emitter
      */
     PulseEmitter.prototype.emitAsync = function emitAsync(evts) {
@@ -118,7 +123,7 @@ function PulseEmitter(options) {
     /**
      * Emits after all the supplied event types have been emitted
      * 
-     * @arg {array} an array of event types to wait for emission
+     * @arg {(Array | Object)} evts an array of event types to wait for emission
      * @returns {PulseEmitter} the pulse emitter
      */
     PulseEmitter.prototype.after = function after(evts) {
@@ -127,9 +132,11 @@ function PulseEmitter(options) {
     };
     
     /**
-     * Pumps a set of events into a control flow sequence
+     * Pumps a set of events into a control flow sequence. Each event 
      * 
-     * @arg {array | object} the pulse events with or w/o control flow properties, each item can be an event type string or an object with control properties
+     * @arg {(Array | Object)} evts the pulse events with or w/o control flow properties, each item can be an event type string or an object with control properties
+     * @arg {(String | Object)} evts.
+     * @arg {...*} [arguments] arguments passed into listeners
      * @returns {PulseEmitter} the pulse emitter
      */
     PulseEmitter.prototype.pump = function pump(evts) {
@@ -141,12 +148,13 @@ function PulseEmitter(options) {
  * Listens for incoming events using event emitter's add listener function, but with optional error handling and pulse event only capabilities
  * 
  * @private
+ * @callback listener
  * @arg {PulseEmitter} pw the pulse emitter
- * @arg {object} opts the pulse emitter options
- * @arg {string} type the event type
- * @arg {function} listener the function to execute when the event type is emitted
- * @arg {string} fnm the optional function name that will be called on the pulse emitter (default: _addListener_)
- * @arg {boolean} at true to only execute the listener when the event is coming from a pump execution
+ * @arg {Object} [opts] the pulse emitter options
+ * @arg {String} type the event type
+ * @arg {listener} listener the function to execute when the event type is emitted
+ * @arg {String} [fnm=addListener] the optional function name that will be called on the pulse emitter
+ * @arg {Boolean} [at=false] true to only execute the listener when the event is coming from a pump execution
  * @returns {PulseEmitter} the pulse emitter
  */
 function listen(pw, opts, type, listener, fnm, at) {
@@ -287,13 +295,13 @@ function PathEmitter(skipper) {
  * 
  * @private
  * @arg {PulseEmitter} pw the pulse emitter
- * @arg evts the events to wait for emission
- * @arg args the arguments that will be propagated to the emitter
- * @arg fn the function.length that will be used to determine the starting index of the args
- * @arg async true asynchronous emission, false for synchronous emission
- * @returns the pumped I.V.
+ * @arg {Object} [options={}] the pulse emitter options
+ * @arg {(Object | Array)} evts the events to pump through the catheter
+ * @arg {...*} [args] the arguments that will be propagated to the emitter
+ * @arg {function} [fn] the function.length that will be used to determine the starting index of the args
+ * @returns {Array} the pumped I.V.
  */
-function infuse(pw, opts, evts, args, fn) {
-    var iv = cat(pw, opts, args && fn ? Array.prototype.slice.call(args, fn.length) : null);
+function infuse(pw, options, evts, args, fn) {
+    var iv = cat(pw, options, args && fn ? Array.prototype.slice.call(args, fn.length) : null);
     return iv.pump(evts, true);
 }

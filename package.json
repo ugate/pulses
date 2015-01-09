@@ -1,0 +1,34 @@
+{
+  "name": "pulses",
+  "version": "0.0.1",
+  "description": "Asynchronous control flow patterns using contractual event emission",
+  "main": "index.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "test": "node -e \"require('./test/oximetry').runDefault()\"",
+    "start": "node server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ugate/pulses.git"
+  },
+  "keywords": [
+    "async",
+    "asynchronous",
+    "flow",
+    "control",
+    "flow",
+    "parallel",
+    "series",
+    "concurrent",
+    "events"
+  ],
+  "author": "ugate",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/ugate/pulses/issues"
+  },
+  "homepage": "https://github.com/ugate/pulses"
+}
