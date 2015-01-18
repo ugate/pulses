@@ -1,6 +1,6 @@
 {
   "name": "pulses",
-  "version": "0.0.1",
+  "version": "0.0.1-alpha.2",
   "description": "Asynchronous control flow patterns using contractual event emission",
   "main": "index.js",
   "directories": {
