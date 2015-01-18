@@ -83,28 +83,20 @@ function PulseEmitter(options) {
     PulseEmitter.prototype.at = function at(type, listener) {
         return listen(this, opts, type, listener, null, true);
     };
-
-    /**
-     * Handles errors by emitting the corresponding event(s)
-     * 
-     * @emits the error event set in the pulse emitter's options passing in the {Error} in error listeners
-     * @arg {Error} err the error to emit proceeded by an end event when "end" is true
-     * @arg {Boolean} async true to emit the error asynchronously
-     * @arg {Boolean} end true to emit the end event set in the pulse emitter's options
-     * @arg {Array} ignores optional array of error.code that will be ignored
-     * @returns {Error} the error when emission has occurred
-     */
-    PulseEmitter.prototype.error = function error(err, async, end, ignore) {
-        if (err && (!ignores || !err.code || !!~ignores.indexOf(err.code))) {
-            var args = Array.prototype.slice.call(arguments, this.error.length);
-            (async ? this.emitAsync : this.emit).apply(this, [opts.errorEvent, err].concat(args));
-            if (end) {
-                (async ? this.emitAsync : this.emit).apply(this, [opts.endEvent, err].concat(args));
-            }
-            return err;
-        }
-    };
     
+    /**
+     * Emits a sequence of events to a control flow chain 
+     * 
+     * @arg {(Array | Object)} evts the pulse events with or w/o control flow properties, each item can be an event type string or an object with control properties
+     * @arg {String} [evts.type=async] the execution type applied to individual events- async, sync, fork, spawn, exec
+     * @arg {Integer} [evts.repeat=1] the number of times that the event chain will be repeated
+     * @arg {...*} [arguments] arguments passed into listeners
+     * @returns {PulseEmitter} the pulse emitter
+     */
+    PulseEmitter.prototype.to = function to(evts) {
+        infuse(this, opts, evts, arguments, this.to);
+    };
+
     /**
      * Emits asynchronously using `setImmediate` or `MutationObserver` in browsers that do not support `setImmediate`
      * 
@@ -126,17 +118,30 @@ function PulseEmitter(options) {
         infuse(this, opts, evts);
         return this;
     };
-    
+
     /**
-     * Pumps a set of events into a control flow sequence. Each event 
+     * Handles errors by emitting the corresponding event(s)
      * 
-     * @arg {(Array | Object)} evts the pulse events with or w/o control flow properties, each item can be an event type string or an object with control properties
-     * @arg {(String | Object)} evts.
-     * @arg {...*} [arguments] arguments passed into listeners
-     * @returns {PulseEmitter} the pulse emitter
+     * @emits the error event set in the pulse emitter's options passing in the {Error} in error listeners
+     * @arg {Error} err the error to emit proceeded by an end event when "end" is true
+     * @arg {Boolean} async true to emit the error asynchronously
+     * @arg {Boolean} end true to emit the end event set in the pulse emitter's options
+     * @arg {Array} ignores optional array of error.code that will be ignored
+     * @returns {Error} the error when emission has occurred
      */
-    PulseEmitter.prototype.pump = function pump(evts) {
-        infuse(this, opts, evts, arguments, this.pump);
+    PulseEmitter.prototype.error = function error(err, async, end, ignore) {
+        if (err && (!ignores || !err.code || !!~ignores.indexOf(err.code))) {
+            var args = arguments.length > this.error.length ? Array.prototype.slice.call(arguments, this.error.length) : null;
+            var m = async ? this.emitAsync : this.emit;
+            if (args) {
+                m.apply(this, [opts.errorEvent, err].concat(args));
+                if (end) m.apply(this, [opts.endEvent, err].concat(args));
+            } else {
+                m.call(this, opts.errorEvent, err);
+                if (end) m.call(this, opts.endEvent, err);
+            }
+            return err;
+        }
     };
 }
 
@@ -158,21 +163,22 @@ function listen(pw, opts, type, listener, fnm, at) {
         if (at && !(artery instanceof cat.Artery)) {
             return; // not a pulse event
         }
+        var al = arguments.length, fl = fn.length;
         if (pulse.emitErrors || (pulse.emitErrors !== false && artery.emitErrors) || 
             (pulse.emitErrors !== false && artery.emitErrors !== false && opts.emitErrors)) {
             try {
-                return listener.apply(this, arguments);
+                return al > fl ? listener.apply(this, arguments) : listener.call(this, artery, pulse);
             } catch (e) {
                 e.emitter = {
                     listener: listener,
                     artery: artery,
                     pulse: pulse,
-                    arguments: Array.prototype.slice.apply(arguments, fn.length)
+                    arguments: al > fl ? Array.prototype.slice.apply(arguments, fl): null
                 };
                 return pw.error(e);
             }
         }
-        return listener.apply(this, arguments);
+        return al > fl ? listener.apply(this, arguments) : listener.call(this, artery, pulse);
     };
     fn._callback = listener;
     return PulseEmitter.super_.prototype[fnm || 'addListener'].call(pw, type, fn);

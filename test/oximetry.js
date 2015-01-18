@@ -17,14 +17,14 @@ oximetry.runDefault = runDefault;
 var maxTestMsDflt = 1000;
 // global properties that are shared between arteries and pulses
 // n == name, d == default value, i == true to inherit value from parent
-var gprops = [{ n: 'type', d: 'series', i: true }, { n: 'repeat', d: 1 }, { n: 'count', d: 0 }];
+var gprops = [{ n: 'type', d: 'async', i: true }, { n: 'repeat', d: 1 }, { n: 'count', d: 0 }];
 
 /**
  * Runs one or more tests against the supplied array of pulse emitter events
  *
- * @see {@link PulseEmitter#pump}
+ * @see {@link PulseEmitter#to}
  * @arg {(Object | Array)} [options={}] the options or an array that represents the options.tests
- * @arg {Array} [options.tests] an array of pulse emitter test cases each of which will be passed into a newly generated pulse emitter's pump
+ * @arg {Array} [options.tests] an array of pulse emitter test cases each of which will be passed into a newly generated pulse emitter's "to" function
  * @arg {function} [options.listener] an optional function that will be called on every pulse emitter emission
  * @arg {Integer} [options.maxWaitMs] maximum number of millisecods to wait for the tests to complete (in case events are not emitted)
  * @arg {Object} emOpts the options passed to generated pulse emitters
@@ -137,7 +137,7 @@ function Oximeter(opts) {
         iid = setTimeout(validate, maxWaitMs);
         start();
         for (var i = 0, l = probes.length; i < l; i++) {
-            probes[i].emitter.pump.apply(probes[i].emitter, hemo[i].__args ? [hemo[i]].concat(hemo[i].__args) : [hemo[i]]);
+            probes[i].emitter.to.apply(probes[i].emitter, hemo[i].__args ? [hemo[i]].concat(hemo[i].__args) : [hemo[i]]);
         }
         return probes.length;
     };
