@@ -73,7 +73,7 @@ function PulseEmitter(options) {
     PulseEmitter.prototype.on = PulseEmitter.prototype.addListener;
     
     /**
-     * Same as `on` and `addListener` counterparts except the only events emitted with be events emitted via `pump`
+     * Same as `on` and `addListener` counterparts except the only events emitted within a `to` control chain sequence will be emitted
      *
      * @callback listener
      * @arg {String} type the event type
@@ -85,7 +85,7 @@ function PulseEmitter(options) {
     };
     
     /**
-     * Emits a sequence of events to a control flow chain 
+     * Emits pulse events through a control flow chain sequence 
      * 
      * @arg {(Array | Object)} evts the pulse events with or w/o control flow properties, each item can be an event type string or an object with control properties
      * @arg {String} [evts.type=async] the execution type applied to individual events- async, sync, fork, spawn, exec

@@ -68,12 +68,14 @@ function detect(diode) {
         var args = arguments.length > testListener.length ? Array.prototype.slice.call(arguments, testListener.length) : undefined;
         console.log('%s', [util.inspect(artery), util.inspect(pulse)].concat(args));
         
+        //assert.ok(diode, 'Exceeded "' + evt + '" event(s) at slot: ' + probe.diodes[evt].length);
+        
         // update test values according to callback iteration
         var indices = diode.absorb(artery, pulse);
         
         // artery
         props(artery, probe.hemo, 'artery', 'arteryTest');
-        assert.strictEqual(indices.other, indices.index, 'artery is not isolated to the artery at index ' + indices.index + 
+        assert.strictEqual(indices.other, indices.slot, 'artery is not isolated to the artery at slot ' + indices.slot + 
             ' (found at: ' + indices.other + '): ' + util.inspect(artery));
         assert.ok(artery.count <= artery.repeat, 'artery occurred ' + artery.count + ' times and exceeded the repeat threshold: ' + artery.repeat);
         assert.ok(Array.isArray(artery.data));
@@ -183,18 +185,18 @@ function Oximeter(opts) {
     Object.seal(oxm);
 }
 
-function Probe(oxm, index, hemo, emOpts) {
+function Probe(oxm, slot, hemo, emOpts) {
     var probe = this;
     Object.freeze(probe.emitter = new PulseEmitter(emOpts));
     probe.oxm = oxm;
-    probe.index = index;
+    probe.slot = slot;
     probe.hasEndEvent = true;
     Object.seal(probe.hemo = hemo);
     probe.args = hemo.__args;
     probe.data = [];
     probe.count = 0;
     probe.last = { pos: -1, cnt: 0, rpt: 0 };
-    probe.marker = 'Test[' + probe.index + ']';
+    probe.marker = 'Test[' + probe.slot + ']';
     probe.activate = function activate() {
         var hasEnd = false;
         for (var t = 0, pe = probe.hemo.events || probe.hemo, tl = pe.length; t < tl; t++) {
@@ -210,19 +212,19 @@ function Probe(oxm, index, hemo, emOpts) {
     Object.seal(probe);
 }
 
-function Diode(probe, index, event) {
+function Diode(probe, slot, event) {
     var diode = this, pcnt;
     diode.probe = probe;
     Object.seal(diode.heme = props(event, diode.probe.hemo));
-    diode.index = index;
+    diode.slot = slot;
     diode.isEnd = diode.heme.event === diode.probe.emitter.endEvent;
     diode.count = 0;
-    diode.marker = diode.heme.event + (!!~diode.index ? '[' + diode.index + ']' : '');
+    diode.marker = diode.heme.event + (!!~diode.slot ? '[' + diode.slot + ']' : '');
     diode.absorb = function absorb(artery, pulse) {
         var plst = diode.probe.last;
         diode.count++;
         diode.probe.count++;
-        var pos = diode.index + 1;
+        var pos = diode.slot + 1;
         if (plst.pos >= 0 && pos === plst.pos && diode.count > plst.cnt) {
             diode.heme.count++;
             plst.rpt++;
@@ -235,23 +237,23 @@ function Diode(probe, index, event) {
         plst.pos = pos;
         plst.cnt = diode.count;
         diode.probe.read(diode);
-        return bleeding(artery, diode.probe.oxm, diode.probe.index);
+        return bleeding(artery, diode.probe.oxm, diode.probe.slot);
     };
     diode.probe.read(diode, true);
     Object.seal(diode);
 }
 
-function bleeding(artery, oximeter, index) {
-    if (!oximeter.arteries[index]) {
-        oximeter.arteries[index] = artery;
+function bleeding(artery, oximeter, slot) {
+    if (!oximeter.arteries[slot]) {
+        oximeter.arteries[slot] = artery;
     } else {
         for (var a in oximeter.arteries) {
-            if (oximeter.arteries[a] === artery && a !== index) {
-                return Object.freeze({ index: index, other: a << 0 });
+            if (oximeter.arteries[a] === artery && a !== slot) {
+                return Object.freeze({ slot: slot, other: a << 0 });
             }
         }
     }
-    return Object.freeze({ index: index, other: index });
+    return Object.freeze({ slot: slot, other: slot });
 }
 
 function banner() {
