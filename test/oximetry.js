@@ -62,9 +62,11 @@ function runDefault(options) {
     });
 }
 
-function detect(diode) {
+function detect(diode, holder) {
     var probe = diode.probe;
     probe.emitter.at(diode.heme.event, function testListener(artery, pulse) {
+        //console.log('pulse.id === ' + pulse.id + ' && diode.heme.id === ' + diode.heme.id);
+        if (!diode.isEnd && pulse.id !== diode.heme.id) return;
         var args = arguments.length > testListener.length ? Array.prototype.slice.call(arguments, testListener.length) : undefined;
         console.log('%s', [util.inspect(artery), util.inspect(pulse)].concat(args));
         
@@ -103,7 +105,7 @@ function props(o, other, nm, onm) {
     if (asrt) {
         assert.ok(o, 'no ' + nm);
     } else {
-        o = typeof o === 'string' ? { event: o } : o;
+        o = ido(o);
     }
     var i = gprops.length;
     while (i--) {
@@ -117,6 +119,12 @@ function props(o, other, nm, onm) {
         }
         
     }
+    return o;
+}
+
+function ido(o, id) {
+    o = typeof o === 'string' ? { event: o } : o;
+    if (!o.id) o.id = id || (Math.random() * 10000 >> 0);
     return o;
 }
 
@@ -165,7 +173,7 @@ function Oximeter(opts) {
         }
         stop();
     }
-    function start() {
+    function start(probing) {
         banner('emitting');
         rds.start = process.hrtime();
     }
@@ -197,10 +205,11 @@ function Probe(oxm, slot, hemo, emOpts) {
     probe.count = 0;
     probe.last = { pos: -1, cnt: 0, rpt: 0 };
     probe.marker = 'Test[' + probe.slot + ']';
+    probe.diodes = {};
     probe.activate = function activate() {
         var hasEnd = false;
         for (var t = 0, pe = probe.hemo.events || probe.hemo, tl = pe.length; t < tl; t++) {
-            hasEnd = detect(new Diode(probe, t, pe[t])).isEnd || hasEnd;
+            hasEnd = detect(new Diode(probe, t, pe[t], pe)).isEnd || hasEnd;
         }
         hasEnd = hasEnd || detect(new Diode(probe, -1, probe.emitter.endEvent));
         return hasEnd;
@@ -212,14 +221,15 @@ function Probe(oxm, slot, hemo, emOpts) {
     Object.seal(probe);
 }
 
-function Diode(probe, slot, event) {
+function Diode(probe, slot, event, events) {
     var diode = this, pcnt;
     diode.probe = probe;
     Object.seal(diode.heme = props(event, diode.probe.hemo));
+    if (events) events[slot] = ido(events[slot], diode.heme.id);
     diode.slot = slot;
     diode.isEnd = diode.heme.event === diode.probe.emitter.endEvent;
     diode.count = 0;
-    diode.marker = diode.heme.event + (!!~diode.slot ? '[' + diode.slot + ']' : '');
+    diode.marker = diode.heme.id + ' ' + diode.heme.event + (!!~diode.slot ? '[' + diode.slot + ']' : '');
     diode.absorb = function absorb(artery, pulse) {
         var plst = diode.probe.last;
         diode.count++;
