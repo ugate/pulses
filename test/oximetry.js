@@ -5,6 +5,7 @@ var util = require('util');
 var path = require('path');
 var fs = require('fs');
 var plet = require('../lib/platelets');
+var cat = require('../lib/catheter');
 var pulses = require('../');
 var PulseEmitter = pulses.PulseEmitter;
 
@@ -16,8 +17,8 @@ oximetry.runDefault = runDefault;
 
 var maxTestMsDflt = 1000;
 // global properties that are shared between arteries and pulses
-// n == name, d == default value, i == true to inherit value from parent
-var gprops = [{ n: 'type', d: 'async', i: true }, { n: 'repeat', d: 1 }, { n: 'count', d: 0 }];
+// n == name, d == default value, i == true to inherit value from parent, l == lowest numeric value, h == highest numeric value
+var gprops = [{ n: 'type', d: 'async', i: true }, { n: 'repeat', d: 1, l: 1 }, { n: 'count', d: 0 }];
 
 /**
  * Runs one or more tests against the supplied array of pulse emitter events
@@ -129,9 +130,9 @@ function ido(o, id) {
 }
 
 function propSet(o, gp, other) {
-    if (o && typeof o[gp.n] === 'undefined') {
-        o[gp.n] = (other && gp.i && other[gp.n]) || gp.d;
-    }
+    var typ = (o && typeof o[gp.n]) || '', lt, ht;
+    if (typ === 'undefined') o[gp.n] = (other && gp.i && other[gp.n]) || gp.d;
+    else if (typ === 'number') o[gp.n] = typeof gp.l === 'number' && o[gp.n] < gp.l ? gp.l : typeof gp.h === 'number' && o[gp.n] > gp.h ? gp.h : o[gp.n];
 }
 
 function Oximeter(opts) {

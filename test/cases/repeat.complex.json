@@ -2,7 +2,7 @@
   "name": "pulses",
   "events": [
     "cmplx1",
-    { "event": "cmplx2", "repeat": 1 },
+    { "event": "cmplx2", "repeat": -1 },
     "cmplx3",
     "cmplx3",
     { "event": "cmplx4", "repeat": 2 },
