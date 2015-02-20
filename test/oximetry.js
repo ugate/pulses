@@ -16,9 +16,6 @@ var oximetry = module.exports = run;
 oximetry.runDefault = runDefault;
 
 var maxTestMsDflt = 1000;
-// global properties that are shared between arteries and pulses
-// n == name, d == default value, i == true to inherit value from parent, l == lowest numeric value, h == highest numeric value
-var gprops = [{ n: 'type', d: 'async', i: true }, { n: 'repeat', d: 1, l: 1 }, { n: 'count', d: 0 }];
 
 /**
  * Runs one or more tests against the supplied array of pulse emitter events
@@ -67,7 +64,7 @@ function detect(diode, holder) {
     var probe = diode.probe;
     probe.emitter.at(diode.heme.event, function testListener(artery, pulse) {
         //console.log('pulse.id === ' + pulse.id + ' && diode.heme.id === ' + diode.heme.id);
-        if (!diode.isEnd && pulse.id !== diode.heme.id) return;
+        if (artery.id !== probe.hemo.id || (!diode.isEnd && pulse.id !== diode.heme.id)) return;
         var args = arguments.length > testListener.length ? Array.prototype.slice.call(arguments, testListener.length) : undefined;
         console.log('%s', [util.inspect(artery), util.inspect(pulse)].concat(args));
         
@@ -77,7 +74,7 @@ function detect(diode, holder) {
         var indices = diode.absorb(artery, pulse);
         
         // artery
-        props(artery, probe.hemo, 'artery', 'arteryTest');
+        cat.assertlet(artery, probe.hemo, 'artery', 'arteryTest');
         assert.strictEqual(indices.other, indices.slot, 'artery is not isolated to the artery at slot ' + indices.slot + 
             ' (found at: ' + indices.other + '): ' + util.inspect(artery));
         assert.ok(artery.count <= artery.repeat, 'artery occurred ' + artery.count + ' times and exceeded the repeat threshold: ' + artery.repeat);
@@ -85,7 +82,7 @@ function detect(diode, holder) {
         assert.strictEqual(artery.data[0], diode.probe.data[0], 'artery.data[0]: ' + artery.data[0] + ' !== expected: ' + diode.probe.data[0]);
         
         // pulse
-        props(pulse, diode.heme, 'pulse', 'pulseTest');
+        cat.assertlet(pulse, diode.heme, 'pulse', 'pulseTest');
         assert.strictEqual(pulse.event, diode.heme.event);
         assert.ok(pulse.count <= pulse.repeat, 'pulse occurred ' + pulse.count + ' times and exceeded the repeat threshold: ' + pulse.repeat);
         
@@ -101,38 +98,18 @@ function detect(diode, holder) {
     return diode;
 }
 
-function props(o, other, nm, onm) {
-    var asrt = nm && other;
-    if (asrt) {
-        assert.ok(o, 'no ' + nm);
-    } else {
-        o = ido(o);
-    }
-    var i = gprops.length;
-    while (i--) {
-        if (asrt) {
-            assert.strictEqual(o[gprops[i].n], other[gprops[i].n], 
-                (nm ? nm + '.' : '') + gprops[i].n + ': ' + o[gprops[i].n] + ' !== ' + 
-                (onm ? onm + '.' : '') + gprops[i].n + ': ' + other[gprops[i].n]);
-        } else {
-            propSet(other, gprops[i]);
-            propSet(o, gprops[i], other);
-        }
-        
-    }
-    return o;
+function arterylet(src) {
+    return cat.arterylet(hemit(src));
 }
 
-function ido(o, id) {
+function pulselet(artery, event, endEvent) {
+    return cat.pulselet(artery, hemit(event, null, endEvent), endEvent);
+}
+
+function hemit(o, id, endEvent) {
     o = typeof o === 'string' ? { event: o } : o;
-    if (!o.id) o.id = id || (Math.random() * 10000 >> 0);
+    if ((!endEvent || o.event !== endEvent) && !o.id) o.id = id || (Math.random() * 10000 >> 0);
     return o;
-}
-
-function propSet(o, gp, other) {
-    var typ = (o && typeof o[gp.n]) || '', lt, ht;
-    if (typ === 'undefined') o[gp.n] = (other && gp.i && other[gp.n]) || gp.d;
-    else if (typ === 'number') o[gp.n] = typeof gp.l === 'number' && o[gp.n] < gp.l ? gp.l : typeof gp.h === 'number' && o[gp.n] > gp.h ? gp.h : o[gp.n];
 }
 
 function Oximeter(opts) {
@@ -143,7 +120,7 @@ function Oximeter(opts) {
     oxm.begin = function begin(hemo, emOpts) {
         banner('listening');
         for (var p = 0, pl = hemo.length; p < pl; p++) {
-            activate(props(hemo[p]), emOpts);
+            activate(arterylet(hemo[p]), emOpts);
         }
         iid = setTimeout(validate, maxWaitMs);
         start();
@@ -205,7 +182,7 @@ function Probe(oxm, slot, hemo, emOpts) {
     probe.data = [];
     probe.count = 0;
     probe.last = { pos: -1, cnt: 0, rpt: 0 };
-    probe.marker = 'Test[' + probe.slot + ']';
+    probe.marker = (hemo.id ? hemo.id + ' ' : '') + 'Test[' + probe.slot + ']';
     probe.diodes = {};
     probe.activate = function activate() {
         var hasEnd = false;
@@ -225,12 +202,12 @@ function Probe(oxm, slot, hemo, emOpts) {
 function Diode(probe, slot, event, events) {
     var diode = this, pcnt;
     diode.probe = probe;
-    Object.seal(diode.heme = props(event, diode.probe.hemo));
-    if (events) events[slot] = ido(events[slot], diode.heme.id);
+    Object.seal(diode.heme = pulselet(diode.probe.hemo, event, diode.probe.emitter.endEvent));
+    if (events) events[slot] = hemit(events[slot], diode.heme.id);
     diode.slot = slot;
     diode.isEnd = diode.heme.event === diode.probe.emitter.endEvent;
     diode.count = 0;
-    diode.marker = diode.heme.id + ' ' + diode.heme.event + (!!~diode.slot ? '[' + diode.slot + ']' : '');
+    diode.marker = (diode.heme.id || '') + ' ' + diode.heme.event + (!!~diode.slot ? '[' + diode.slot + ']' : '');
     diode.absorb = function absorb(artery, pulse) {
         var plst = diode.probe.last;
         diode.count++;
