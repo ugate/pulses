@@ -103,7 +103,7 @@ function arterylet(src) {
 }
 
 function pulselet(artery, event, endEvent) {
-    return cat.pulselet(artery, hemit(event, null, endEvent), endEvent);
+    return cat.pulselet(artery, event === endEvent ? event : hemit(event, null, endEvent), endEvent);
 }
 
 function hemit(o, id, endEvent) {
