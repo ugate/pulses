@@ -189,7 +189,7 @@ function Probe(oxm, slot, hemo, emOpts) {
         for (var t = 0, pe = probe.hemo.events || probe.hemo, tl = pe.length; t < tl; t++) {
             hasEnd = detect(new Diode(probe, t, pe[t], pe)).isEnd || hasEnd;
         }
-        hasEnd = hasEnd || detect(new Diode(probe, -1, probe.emitter.endEvent));
+        hasEnd = hasEnd || detect(new Diode(probe, -1, probe.emitter.options.endEvent));
         return hasEnd;
     };
     probe.read = function read(diode, register) {
@@ -202,10 +202,10 @@ function Probe(oxm, slot, hemo, emOpts) {
 function Diode(probe, slot, event, events) {
     var diode = this, pcnt;
     diode.probe = probe;
-    Object.seal(diode.heme = pulselet(diode.probe.hemo, event, diode.probe.emitter.endEvent));
+    Object.seal(diode.heme = pulselet(diode.probe.hemo, event, diode.probe.emitter.options.endEvent));
     if (events) events[slot] = hemit(events[slot], diode.heme.id);
     diode.slot = slot;
-    diode.isEnd = diode.heme.event === diode.probe.emitter.endEvent;
+    diode.isEnd = diode.heme.event === diode.probe.emitter.options.endEvent;
     diode.count = 0;
     diode.marker = (diode.heme.id || '') + ' ' + diode.heme.event + (!!~diode.slot ? '[' + diode.slot + ']' : '');
     diode.absorb = function absorb(artery, pulse) {
