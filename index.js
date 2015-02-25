@@ -26,7 +26,7 @@ function PulseEmitter(options) {
         endEvent: 'end', 
         errorEvent: 'error',
         emitErrors: false
-    }, options, true));
+    }, options, true, true, true));
     events.EventEmitter.call(this);
 }
 
@@ -81,7 +81,7 @@ PulseEmitter.prototype.on = PulseEmitter.prototype.addListener;
  * @returns {PulseEmitter} the pulse emitter
  */
 PulseEmitter.prototype.at = function at(type, listener, retrofit) {
-    return listen(this, type, listener, null, true);
+    return listen(this, type, listener, null, retrofit || true);
 };
 
 /**
@@ -96,11 +96,12 @@ PulseEmitter.prototype.at = function at(type, listener, retrofit) {
  * @arg {String} [evts[].type] overrides the inherited type value from the event chain
  * @arg {Integer} [evts[].repeat] overrides the inherited repeat value from the event chain
  * @arg {*} [evts[].id] an arbitrary identifier assigned to the individual event
- * @arg {...*} [arguments] additional arguments passed into listeners
+ * @arg {...*} [arguments] additional arguments appeneded to the arguments passed into all listeners
  * @returns {PulseEmitter} the pulse emitter
  */
 PulseEmitter.prototype.to = function to(evts) {
-    infuse(this, evts, arguments, this.to);
+    var fl = this.to.length, iv = cat(this, arguments.length > fl ? Array.prototype.slice.call(arguments, fl) : null);
+    iv.pump(evts, true);
 };
 
 /**
@@ -112,17 +113,6 @@ PulseEmitter.prototype.to = function to(evts) {
  */
 PulseEmitter.prototype.emitAsync = function emitAsync(evts) {
     return plet.asyncd(this, evts, 'emit', arguments, this.emitAsync);
-};
-
-/**
- * Emits after all the supplied event types have been emitted
- * 
- * @arg {(Array | Object)} evts an array of event types to wait for emission
- * @returns {PulseEmitter} the pulse emitter
- */
-PulseEmitter.prototype.after = function after(evts) {
-    infuse(this, evts);
-    return this;
 };
 
 PulseEmitter.prototype.cb = function cb(fn) {
@@ -183,54 +173,44 @@ PulseEmitter.prototype.error = function error(err, async, end, ignore) {
  * @callback listener
  * @arg {PulseEmitter} pw the pulse emitter
  * @arg {String} type the event type
- * @arg {listener} listener the function to execute when the event type is emitted
+ * @arg {function} listener the function to execute when the event type is emitted
  * @arg {String} [fnm=addListener] the optional function name that will be called on the pulse emitter
  * @arg {Boolean} [at=false] true to only execute the listener when the event is coming from a pump execution
  * @returns {PulseEmitter} the pulse emitter
  */
 function listen(pw, type, listener, fnm, rf) {
-    var fn = function pulseListener(artery, pulse) {
+    var fn = function pulseListener(flow, artery, pulse) {
         if (rf && (!(artery instanceof cat.Artery) || !(pulse instanceof cat.Pulse))) {
             return; // not a pulse event
         }
-        var al = arguments.length, fl = fn.length;
-        if (pulse.emitErrors || (pulse.emitErrors !== false && artery.emitErrors) || 
-            (pulse.emitErrors !== false && artery.emitErrors !== false && pw.options && pw.options.emitErrors)) {
-            try {
-                return callback(listener, this, artery, pulse, rf, arguments, fl);
-            } catch (e) {
-                e.emitter = {
-                    listener: listener,
-                    artery: artery,
-                    pulse: pulse,
-                    arguments: al > fl ? Array.prototype.slice.apply(arguments, fl): null
-                };
-                return pw.error(e);
-            }
-        }
-        return callback(listener, this, artery, pulse, rf, arguments, fl);
+        var args = arguments;
+        if (typeof rf === 'string')
+            flow.wait(function retrofit() {
+                hark(pw, flow, artery, pulse, args, fn);
+            });
+        else hark(pw, flow, artery, pulse, args, fn);
     };
     fn._callback = listener;
     return PulseEmitter.super_.prototype[fnm || 'addListener'].call(pw, type, fn);
 }
 
-function callback(fn, thiz, artery, pulse, rf, args, argi) {
-    return args.length > argi ? fn.apply(thiz, args) : fn.call(thiz, artery, pulse);
-}
-
-/**
- * Emits event(s) after a given number of events are received
- * 
- * @private
- * @arg {PulseEmitter} pw the pulse emitter
- * @arg {(Object | Array)} evts the events to pump through the catheter
- * @arg {*[]} [args] the arguments that will be propagated to the emitter
- * @arg {function} [fn] the function.length that will be used to determine the starting index of the args
- * @returns {Array} the pumped I.V.
- */
-function infuse(pw, evts, args, fn) {
-    var iv = cat(pw, args && fn ? Array.prototype.slice.call(args, fn.length) : null);
-    return iv.pump(evts, true);
+function hark(pw, flow, artery, pulse, args, fn) {
+    var al = args.length, fl = fn.length, cb = fn._callback;
+    if (pulse.emitErrors || (pulse.emitErrors !== false && artery.emitErrors) || 
+            (pulse.emitErrors !== false && artery.emitErrors !== false && pw.options && pw.options.emitErrors)) {
+        try {
+            return al > fl ? cb.apply(this, Array.prototype.slice.call(args, 1)) : cb.call(this, artery, pulse);
+        } catch (e) {
+            e.emitter = {
+                listener: cb,
+                artery: artery,
+                pulse: pulse,
+                arguments: al > fl ? Array.prototype.slice.apply(arguments, fl): null
+            };
+            return pw.error(e);
+        }
+    }
+    return al > fl ? cb.apply(this, Array.prototype.slice.call(args, 1)) : cb.call(this, artery, pulse);
 }
 
 function bind(emr, que) {
