@@ -74,10 +74,10 @@ PulseEmitter.prototype.on = PulseEmitter.prototype.addListener;
 /**
  * Same as **on** and **addListener** counterparts except the only events emitted within a **to** control chain sequence or a bound target will be listened to
  *
- * @callback listener
  * @arg {String} type the event type
  * @arg {pulseListener} listener the listener function called when the pulse event type is emitted
- * @arg {String} retrofit a flag indicating a type of retrofit will be applied to the listener e.g. function(error, [... arguments])
+ * @arg {String} [retrofit] a flag that indicates a pattern to mimic (e.g. "callback" would pass in pending arguments to the listener with an auto-generated callback function 
+ *                          as the last argument and would pass the callback results into the next waiting listeners in the chain)
  * @returns {PulseEmitter} the pulse emitter
  */
 PulseEmitter.prototype.at = function at(type, listener, retrofit) {
@@ -158,12 +158,14 @@ PulseEmitter.prototype.error = function error(err, async, end, ignore) {
  * @arg {String} artery.type the emission execution type applied to the event chain- async, sync, fork, spawn, exec
  * @arg {Integer} artery.repeat the number of times that the event chain will/has been repeated
  * @arg {*} [artery.id] an arbitrary identifier assigned to the event chain
+ * @arg {*[]} artery.data a mutable array for storing data throughout the life-cycle of the event chain
+ * @arg {*[]} artery.pass a mutable array for adding arguments that will be passed into the next listener functions in the event chain (cleared after the each emission) 
  * @arg {Object} pulse the current event state
  * @arg {String} pulse.event the event name
  * @arg {String} pulse.type the event type
  * @arg {Integer} pulse.repeat the number of times that the event will/has been repeated
  * @arg {*} [pulse.id] an arbitrary identifier assigned to the individual event
- * @arg {...*} [arguments] additional arguments passed into listeners from emission
+ * @arg {...*} [arguments] additional arguments passed by the previous listener's artery.pass followed by any arguments passed during initial chain emission
  */
 
 /**
@@ -175,7 +177,8 @@ PulseEmitter.prototype.error = function error(err, async, end, ignore) {
  * @arg {String} type the event type
  * @arg {function} listener the function to execute when the event type is emitted
  * @arg {String} [fnm=addListener] the optional function name that will be called on the pulse emitter
- * @arg {Boolean} [at=false] true to only execute the listener when the event is coming from a pump execution
+ * @arg {(String | Boolean)} [rf] a flag that indicates a pattern to mimic (e.g. "callback" would pass in pending arguments to the listener with an auto-generated 
+ *                                callback function as the last argument that would pass the results into the next pulse(s) in the chain)
  * @returns {PulseEmitter} the pulse emitter
  */
 function listen(pw, type, listener, fnm, rf) {
@@ -183,34 +186,37 @@ function listen(pw, type, listener, fnm, rf) {
         if (rf && (!(artery instanceof cat.Artery) || !(pulse instanceof cat.Pulse))) {
             return; // not a pulse event
         }
-        var args = arguments;
-        if (typeof rf === 'string')
-            flow.wait(function retrofit() {
-                hark(pw, flow, artery, pulse, args, fn);
+        var args = arguments, argi = 1;
+        if (rf === 'callback') {
+            flow.pause();
+            var argsp = artery.pass.concat(function retrofitCb() { // last argument should be the callback function
+                artery.pass.splice.apply(artery.pass, [artery.pass.length, 0].concat(arguments));
+                flow.resume();
             });
-        else hark(pw, flow, artery, pulse, args, fn);
+            hark(pw, artery, pulse, argsp, Infinity, null, fn._callback);
+        } else hark(pw, artery, pulse, args, fn.length, argi, fn._callback);
     };
     fn._callback = listener;
     return PulseEmitter.super_.prototype[fnm || 'addListener'].call(pw, type, fn);
 }
 
-function hark(pw, flow, artery, pulse, args, fn) {
-    var al = args.length, fl = fn.length, cb = fn._callback;
+function hark(pw, artery, pulse, args, fl, ai, cb) {
+    var al = args.length;
     if (pulse.emitErrors || (pulse.emitErrors !== false && artery.emitErrors) || 
             (pulse.emitErrors !== false && artery.emitErrors !== false && pw.options && pw.options.emitErrors)) {
         try {
-            return al > fl ? cb.apply(this, Array.prototype.slice.call(args, 1)) : cb.call(this, artery, pulse);
+            return al > fl ? cb.apply(this, isNaN(ai) ? args : Array.prototype.slice.call(args, ai)) : cb.call(this, artery, pulse);
         } catch (e) {
             e.emitter = {
                 listener: cb,
                 artery: artery,
                 pulse: pulse,
-                arguments: al > fl ? Array.prototype.slice.apply(arguments, fl): null
+                arguments: al > fl ? Array.prototype.slice.apply(args, fl): null
             };
             return pw.error(e);
         }
     }
-    return al > fl ? cb.apply(this, Array.prototype.slice.call(args, 1)) : cb.call(this, artery, pulse);
+    return al > fl ? cb.apply(this, isNaN(ai) ? args : Array.prototype.slice.call(args, ai)) : cb.call(this, artery, pulse);
 }
 
 function bind(emr, que) {
