@@ -33,7 +33,10 @@ function run(options, emOpts) {
 
 /**
  * Requires each of the files within the "cases" directory and appends them as test cases. If the file exports a function the function will
- * be called and should return an array or object that will be appended to the commulative test cases.
+ * be called and should return an array or object that will be appended to the commulative test cases. Each test case can contain a **__test**
+ * object with a **pass** array of arguments that will be set via the listener using **artery.pass**. For example, to pass *1, 2, 3*:
+ * 
+ * __test: { pass: [1, 2, 3] }
  * 
  * @see {@link run}
  * @arg {Object} [options={}] the run options minus the test cases
@@ -86,14 +89,21 @@ function detect(diode, holder) {
         assert.strictEqual(pulse.event, diode.heme.event);
         assert.ok(pulse.count <= pulse.repeat, 'pulse occurred ' + pulse.count + ' times and exceeded the repeat threshold: ' + pulse.repeat);
         
-        // arguments carried over?
-        assert.deepEqual(args, probe.args, 'listener arguments: "' + args + '" != expected arguments: "' + probe.args + '"');
+        // verify test arguments have been passed from
+        var passed = !probe.lastDiode ? probe.test && probe.test.pass : probe.lastDiode && probe.lastDiode.test && probe.lastDiode.test.pass;
+        assert.deepEqual(args, passed, 'listener arguments: "' + args + '" != expected arguments: "' + passed + '"');
         
+        // add any test arguments that will be passed into the next listener
+        if (diode.test && diode.test.pass) {
+            artery.pass.splice.apply(artery.pass, [artery.pass.length, 0].concat(diode.test.pass));
+        }
+
         // TODO : add event order assertion
 
         if (probe.oxm.listener) {
             probe.oxm.listener(diode);
         }
+        if (diode.heme.count >= diode.heme.repeat) probe.lastDiode = diode;
     });
     return diode;
 }
@@ -125,7 +135,7 @@ function Oximeter(opts) {
         iid = setTimeout(validate, maxWaitMs);
         start();
         for (var i = 0, l = probes.length; i < l; i++) {
-            probes[i].emitter.to.apply(probes[i].emitter, hemo[i].__args ? [hemo[i]].concat(hemo[i].__args) : [hemo[i]]);
+            probes[i].emitter.to.apply(probes[i].emitter, probes[i].test.pass ? [hemo[i]].concat(probes[i].test.pass) : [hemo[i]]);
         }
         return probes.length;
     };
@@ -178,9 +188,10 @@ function Probe(oxm, slot, hemo, emOpts) {
     probe.slot = slot;
     probe.hasEndEvent = true;
     Object.seal(probe.hemo = hemo);
-    probe.args = hemo.__args;
     probe.data = [];
     probe.count = 0;
+    probe.test = hemo.__test || {};
+    probe.lastDiode = null;
     probe.last = { pos: -1, cnt: 0, rpt: 0 };
     probe.marker = (hemo.id ? hemo.id + ' ' : '') + 'Test[' + probe.slot + ']';
     probe.diodes = {};
@@ -203,7 +214,9 @@ function Diode(probe, slot, event, events) {
     var diode = this, pcnt;
     diode.probe = probe;
     Object.seal(diode.heme = pulselet(diode.probe.hemo, event, diode.probe.emitter.options.endEvent));
+    if (typeof event === 'object' && event.__test) diode.test = event.__test;
     if (events) events[slot] = hemit(events[slot], diode.heme.id);
+    //console.dir({ event: event, test: diode.heme });
     diode.slot = slot;
     diode.isEnd = diode.heme.event === diode.probe.emitter.options.endEvent;
     diode.count = 0;

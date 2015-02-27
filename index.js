@@ -85,6 +85,24 @@ PulseEmitter.prototype.at = function at(type, listener, retrofit) {
 };
 
 /**
+ * Pulse emitter listeners
+ * 
+ * @callback PulseEmitter~pulseListener
+ * @arg {Object} artery event chain state
+ * @arg {String} artery.type the emission execution type applied to the event chain- async, sync, fork, spawn, exec
+ * @arg {Integer} artery.repeat the number of times that the event chain will/has been repeated
+ * @arg {*} [artery.id] an arbitrary identifier assigned to the event chain
+ * @arg {*[]} artery.data a mutable array for storing data throughout the life-cycle of the event chain
+ * @arg {*[]} artery.pass a mutable array for adding arguments that will be passed into the next listener functions in the event chain (cleared after the each emission) 
+ * @arg {Object} pulse the current event state
+ * @arg {String} pulse.event the event name
+ * @arg {String} pulse.type the event type
+ * @arg {Integer} pulse.repeat the number of times that the event will/has been repeated
+ * @arg {*} [pulse.id] an arbitrary identifier assigned to the individual event
+ * @arg {...*} [arguments] additional arguments passed by the previous listener's artery.pass followed by any arguments passed during initial chain emission
+ */
+
+/**
  * Emits pulse events through a control flow chain sequence 
  * 
  * @arg {(Array | Object)} evts the pulse events that will be emitted in sequence (order determined by asynchronicity)
@@ -96,7 +114,7 @@ PulseEmitter.prototype.at = function at(type, listener, retrofit) {
  * @arg {String} [evts[].type] overrides the inherited type value from the event chain
  * @arg {Integer} [evts[].repeat] overrides the inherited repeat value from the event chain
  * @arg {*} [evts[].id] an arbitrary identifier assigned to the individual event
- * @arg {...*} [arguments] additional arguments appeneded to the arguments passed into all listeners
+ * @arg {...*} [arguments] additional arguments appeneded to the arguments passed into the first listener in the chain
  * @returns {PulseEmitter} the pulse emitter
  */
 PulseEmitter.prototype.to = function to(evts) {
@@ -149,24 +167,6 @@ PulseEmitter.prototype.error = function error(err, async, end, ignore) {
         return err;
     }
 };
-
-/**
- * Pulse emitter listeners
- * 
- * @callback PulseEmitter~pulseListener
- * @arg {Object} artery event chain state
- * @arg {String} artery.type the emission execution type applied to the event chain- async, sync, fork, spawn, exec
- * @arg {Integer} artery.repeat the number of times that the event chain will/has been repeated
- * @arg {*} [artery.id] an arbitrary identifier assigned to the event chain
- * @arg {*[]} artery.data a mutable array for storing data throughout the life-cycle of the event chain
- * @arg {*[]} artery.pass a mutable array for adding arguments that will be passed into the next listener functions in the event chain (cleared after the each emission) 
- * @arg {Object} pulse the current event state
- * @arg {String} pulse.event the event name
- * @arg {String} pulse.type the event type
- * @arg {Integer} pulse.repeat the number of times that the event will/has been repeated
- * @arg {*} [pulse.id] an arbitrary identifier assigned to the individual event
- * @arg {...*} [arguments] additional arguments passed by the previous listener's artery.pass followed by any arguments passed during initial chain emission
- */
 
 /**
  * Listens for incoming events using event emitter's add listener function, but with optional error handling and pulse event only capabilities

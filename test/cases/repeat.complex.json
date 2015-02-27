@@ -5,7 +5,7 @@
     { "event": "cmplx2", "repeat": null },
     "cmplx3",
     "cmplx3",
-    { "event": "cmplx4", "repeat": 2 },
+    { "event": "cmplx4", "repeat": 2,  "__test": { "pass": [10, 20, 30] } },
     "cmplx5",
     { "event": "cmplx6", "parallel": 2 },
     "cmplx7",
