@@ -158,8 +158,10 @@ PulseEmitter.prototype.error = function error(err, async, end, ignore) {
         var args = arguments.length > this.error.length ? Array.prototype.slice.call(arguments, this.error.length) : null;
         var m = async ? this.emitAsync : this.emit;
         if (args) {
-            m.apply(this, [this.options.errorEvent, err].concat(args));
-            if (end) m.apply(this, [this.options.endEvent, err].concat(args));
+            var ea = [this.options.errorEvent, err];
+            ea.push.apply(ea, args);
+            m.apply(this, ea);
+            if (end) m.apply(this, ea);
         } else {
             m.call(this, this.options.errorEvent, err);
             if (end) m.call(this, this.options.endEvent, err);
@@ -189,8 +191,10 @@ function listen(pw, type, listener, fnm, rf) {
         var args = arguments, argi = 1;
         if (rf === 'callback') {
             flow.pause();
-            var argsp = artery.pass.concat(function retrofitCb() { // last argument should be the callback function
-                artery.pass.splice.apply(artery.pass, [artery.pass.length, 0].concat(arguments));
+            var argsp = artery.pass.push(function retrofitCb() { // last argument should be the callback function
+                var args = [artery.pass.length, 0];
+                args.push.apply(args, arguments);
+                artery.pass.splice.apply(artery.pass, args);
                 flow.resume();
             });
             hark(pw, artery, pulse, argsp, Infinity, null, fn._callback);

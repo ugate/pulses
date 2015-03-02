@@ -68,9 +68,24 @@ function detect(diode, holder) {
     probe.emitter.at(diode.heme.event, function testListener(artery, pulse) {
         //console.log('pulse.id === ' + pulse.id + ' && diode.heme.id === ' + diode.heme.id);
         if (artery.id !== probe.hemo.id || (!diode.isEnd && pulse.id !== diode.heme.id)) return;
-        var args = arguments.length > testListener.length ? Array.prototype.slice.call(arguments, testListener.length) : undefined;
-        console.log('%s', [util.inspect(artery), util.inspect(pulse)].concat(args));
+        var args = arguments.length > testListener.length ? Array.prototype.slice.call(arguments, testListener.length) : [], arr;
+        var isPass = diode.heme.type === 'sync' || diode.heme.event === probe.emitter.options.endEvent, passed = isPass ? probe.pass.slice() : [];
+        if (isPass) probe.pass.length = 0;
         
+        // add any test arguments that will be passed into the next listener
+        if (diode.test && diode.test.pass) {
+            (arr = []).push.apply(arr, diode.test.pass);
+            artery.pass.push.apply(artery.pass, arr);
+            (arr = []).push.apply(arr, diode.test.pass);
+            probe.pass.push.apply(probe.pass, arr);
+        }
+        (arr = [util.inspect(artery), util.inspect(pulse)]).push.apply(arr, args);
+        console.log('%s', arr);
+        
+        // verify test arguments have been passed from
+        assert.deepEqual(args, passed, 'listener arguments: "' + args + '" != expected arguments: "' + passed + '"');
+        assert.deepEqual(artery.pass, probe.pass, 'listener pass: "' + artery.pass + '" != expected pass: "' + probe.pass + '"');
+
         //assert.ok(diode, 'Exceeded "' + evt + '" event(s) at slot: ' + probe.diodes[evt].length);
         
         // update test values according to callback iteration
@@ -88,22 +103,12 @@ function detect(diode, holder) {
         cat.assertlet(pulse, diode.heme, 'pulse', 'pulseTest');
         assert.strictEqual(pulse.event, diode.heme.event);
         assert.ok(pulse.count <= pulse.repeat, 'pulse occurred ' + pulse.count + ' times and exceeded the repeat threshold: ' + pulse.repeat);
-        
-        // verify test arguments have been passed from
-        var passed = !probe.lastDiode ? probe.test && probe.test.pass : probe.lastDiode && probe.lastDiode.test && probe.lastDiode.test.pass;
-        assert.deepEqual(args, passed, 'listener arguments: "' + args + '" != expected arguments: "' + passed + '"');
-        
-        // add any test arguments that will be passed into the next listener
-        if (diode.test && diode.test.pass) {
-            artery.pass.splice.apply(artery.pass, [artery.pass.length, 0].concat(diode.test.pass));
-        }
 
         // TODO : add event order assertion
 
         if (probe.oxm.listener) {
             probe.oxm.listener(diode);
         }
-        if (diode.heme.count >= diode.heme.repeat) probe.lastDiode = diode;
     });
     return diode;
 }
@@ -134,8 +139,10 @@ function Oximeter(opts) {
         }
         iid = setTimeout(validate, maxWaitMs);
         start();
-        for (var i = 0, l = probes.length; i < l; i++) {
-            probes[i].emitter.to.apply(probes[i].emitter, probes[i].test.pass ? [hemo[i]].concat(probes[i].test.pass) : [hemo[i]]);
+        for (var i = 0, l = probes.length, arr; i < l; i++) {
+            arr = [hemo[i]];
+            if (probes[i].test.pass) arr.push.apply(arr, probes[i].test.pass);
+            probes[i].emitter.to.apply(probes[i].emitter, arr);
         }
         return probes.length;
     };
@@ -189,9 +196,9 @@ function Probe(oxm, slot, hemo, emOpts) {
     probe.hasEndEvent = true;
     Object.seal(probe.hemo = hemo);
     probe.data = [];
+    probe.pass = [];
     probe.count = 0;
     probe.test = hemo.__test || {};
-    probe.lastDiode = null;
     probe.last = { pos: -1, cnt: 0, rpt: 0 };
     probe.marker = (hemo.id ? hemo.id + ' ' : '') + 'Test[' + probe.slot + ']';
     probe.diodes = {};
