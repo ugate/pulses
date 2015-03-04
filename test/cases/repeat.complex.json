@@ -9,7 +9,7 @@
     "cmplx5",
     { "event": "cmplx6", "parallel": 2 },
     "cmplx7",
-    { "event": "cmplx8", "parallel": 3 },
+    { "event": "cmplx8", "target": { "event": "cmplxIn" } },
     "cmplx9"
   ],
   "repeat": 2

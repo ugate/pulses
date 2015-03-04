@@ -77,7 +77,8 @@ PulseEmitter.prototype.on = PulseEmitter.prototype.addListener;
  * @arg {String} type the event type
  * @arg {pulseListener} listener the listener function called when the pulse event type is emitted
  * @arg {String} [retrofit] a flag that indicates a pattern to mimic (e.g. "callback" would pass in pending arguments to the listener with an auto-generated callback function 
- *                          as the last argument and would pass the callback results into the next waiting listeners in the chain)
+ *                          as the last argument and would pass the callback results into the next waiting listeners in the chain; if the first argument is an Error it will 
+ *                          emit/throw accordingly)
  * @returns {PulseEmitter} the pulse emitter
  */
 PulseEmitter.prototype.at = function at(type, listener, retrofit) {
@@ -174,13 +175,13 @@ PulseEmitter.prototype.error = function error(err, async, end, ignore) {
  * Listens for incoming events using event emitter's add listener function, but with optional error handling and pulse event only capabilities
  * 
  * @private
- * @callback listener
  * @arg {PulseEmitter} pw the pulse emitter
  * @arg {String} type the event type
  * @arg {function} listener the function to execute when the event type is emitted
  * @arg {String} [fnm=addListener] the optional function name that will be called on the pulse emitter
- * @arg {(String | Boolean)} [rf] a flag that indicates a pattern to mimic (e.g. "callback" would pass in pending arguments to the listener with an auto-generated 
- *                                callback function as the last argument that would pass the results into the next pulse(s) in the chain)
+ * @arg {(String | Boolean)} [rf] a flag that indicates a pattern to mimic (e.g. "callback" would pass in pending arguments to the listener with an auto-generated callback function 
+ *                          as the last argument and would pass the callback results into the next waiting listeners in the chain; if the first argument is an Error it will emit/throw 
+ *                          accordingly)
  * @returns {PulseEmitter} the pulse emitter
  */
 function listen(pw, type, listener, fnm, rf) {
@@ -190,26 +191,45 @@ function listen(pw, type, listener, fnm, rf) {
         }
         var args = arguments, argi = 1;
         if (rf === 'callback') {
-            flow.pause();
-            var argsp = artery.pass.push(function retrofitCb() { // last argument should be the callback function
-                var args = [artery.pass.length, 0];
-                args.push.apply(args, arguments);
-                artery.pass.splice.apply(artery.pass, args);
-                flow.resume();
+            var ua = args.length > fn.length, fl = ua ? fn.length : 0, argsp = ua ? args : artery.pass;
+            hark(pw, artery, pulse, argsp, fl, fl, fn._callback, function retrofitCb(err) { // last argument should be the callback function
+                if (err instanceof Error) flow.pause(function retrofitErr() {
+                    hark(pw, artery, pulse, err);
+                });
+                if (arguments.length) arguments.length === 1 ? artery.pass.push(arguments[0]) : artery.pass.push.apply(artery.pass, arguments);
             });
-            hark(pw, artery, pulse, argsp, Infinity, null, fn._callback);
         } else hark(pw, artery, pulse, args, fn.length, argi, fn._callback);
     };
     fn._callback = listener;
     return PulseEmitter.super_.prototype[fnm || 'addListener'].call(pw, type, fn);
 }
 
-function hark(pw, artery, pulse, args, fl, ai, cb) {
-    var al = args.length;
+/**
+ * Handles callback execution with error handling/detection
+ * 
+ * @private
+ * @arg {PulseEmitter} pw the pulse emitter
+ * @arg {Object} artery the event chain object
+ * @arg {Object} pulse the event object
+ * @arg {(*[] | Error)} args the array of arguments that will be assessed for passing into the callback or an error to emit or throw
+ * @arg {Integer} [fl] the length to check against the passed args length to determine if the arguments need to be passed 
+ *                      (when args is not an error this may increase performance)
+ * @arg {Integer} [ai] the index to slice the args before passing to the callback
+ * @arg {function} [cb] the callback function that will be invoked using the passed args (not applicable if the args is an error)
+ * @arg {*} [lastArg] pushes argument to the end of the arguments passed into the callback
+ * @returns {*} the callback's return value or error object when an error is passed in as args
+ */
+function hark(pw, artery, pulse, args, fl, ai, cb, lastArg) {
+    var err = args instanceof Error, al = err ? 0 : args.length, argsp = args;
+    if (al > fl) {
+        argsp = isNaN(ai) ? args : Array.prototype.slice.call(args, ai);
+        if (lastArg) argsp.push(lastArg);
+    } 
     if (pulse.emitErrors || (pulse.emitErrors !== false && artery.emitErrors) || 
             (pulse.emitErrors !== false && artery.emitErrors !== false && pw.options && pw.options.emitErrors)) {
         try {
-            return al > fl ? cb.apply(this, isNaN(ai) ? args : Array.prototype.slice.call(args, ai)) : cb.call(this, artery, pulse);
+            if (err) throw err;
+            return al > fl ? cb.apply(pw, argsp) : cb.call(pw, artery, pulse);
         } catch (e) {
             e.emitter = {
                 listener: cb,
@@ -220,7 +240,8 @@ function hark(pw, artery, pulse, args, fl, ai, cb) {
             return pw.error(e);
         }
     }
-    return al > fl ? cb.apply(this, isNaN(ai) ? args : Array.prototype.slice.call(args, ai)) : cb.call(this, artery, pulse);
+    if (err) throw err;
+    return al > fl ? cb.apply(pw, argsp) : cb.call(pw, artery, pulse);
 }
 
 function bind(emr, que) {

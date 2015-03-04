@@ -63,20 +63,25 @@ function runDefault(options) {
     });
 }
 
-function detect(diode, holder) {
+function detect(diode) {
     var probe = diode.probe;
+    retrofit(diode);
     probe.emitter.at(diode.heme.event, function testListener(artery, pulse) {
         //console.log('pulse.id === ' + pulse.id + ' && diode.heme.id === ' + diode.heme.id);
         if (artery.id !== probe.hemo.id || (!diode.isEnd && pulse.id !== diode.heme.id)) return;
         var args = arguments.length > testListener.length ? Array.prototype.slice.call(arguments, testListener.length) : [], arr;
-        var isPass = diode.heme.type === 'sync' || diode.heme.event === probe.emitter.options.endEvent, passed = isPass ? probe.pass.slice() : [];
+        var isPass = diode.heme.type === 'sync' || diode.heme.event === probe.emitter.options.endEvent || probe.test.pass;
+        if (probe.test.pass) { // initial arguments passed in from emitter chain invocation
+            probe.pass.push.apply(probe.pass, probe.test.pass);
+            probe.test.pass.length = 0;
+        }
+        var passed = isPass ? probe.pass.slice() : [];
         if (isPass) probe.pass.length = 0;
         
         // add any test arguments that will be passed into the next listener
         if (diode.test && diode.test.pass) {
             (arr = []).push.apply(arr, diode.test.pass);
             artery.pass.push.apply(artery.pass, arr);
-            (arr = []).push.apply(arr, diode.test.pass);
             probe.pass.push.apply(probe.pass, arr);
         }
         (arr = [util.inspect(artery), util.inspect(pulse)]).push.apply(arr, args);
@@ -111,6 +116,24 @@ function detect(diode, holder) {
         }
     });
     return diode;
+}
+
+function retrofit(diode) {
+    if (!diode.test.callback) return;
+    diode.probe.emitter.at(diode.heme.event, function cbTest() {
+        var args = arguments, cb = args.length ? args[args.length - 1] : null;
+        assert.ok(typeof cb === 'function', 'last argument is not a valid callback function: ' + util.inspect(args));
+        plet.defer(function immediateCb() {
+            var argsr = [diode.test.callback.error || null];
+            if (diode.test.callback.returns) argsr.push.apply(argsr, diode.test.callback.returns);
+            /*console.log('================ retrofit io ======================');
+            console.dir(args);
+            console.dir(argsr);
+            console.log('===================================================');*/
+            diode.probe.pass.push.apply(diode.probe.pass, argsr);
+            cb.apply(null, argsr);
+        });
+    }, 'callback');
 }
 
 function arterylet(src) {
@@ -221,7 +244,7 @@ function Diode(probe, slot, event, events) {
     var diode = this, pcnt;
     diode.probe = probe;
     Object.seal(diode.heme = pulselet(diode.probe.hemo, event, diode.probe.emitter.options.endEvent));
-    if (typeof event === 'object' && event.__test) diode.test = event.__test;
+    diode.test = typeof event === 'object' && event.__test ? event.__test : {};
     if (events) events[slot] = hemit(events[slot], diode.heme.id);
     //console.dir({ event: event, test: diode.heme });
     diode.slot = slot;

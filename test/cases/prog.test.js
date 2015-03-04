@@ -2,11 +2,17 @@
 /**
  * Simple test cases without JSON definitions
  * 
- * @returns {Array} a the array of tests that will be ran
+ * @returns {*[]} an array of tests that will be ran
  */
 module.exports = function progTests() {
     var p = [], i = -1;
     
+    p[++i] = ['cb1', { event: 'cb2', __test: { pass: ['cb2-out-1', 'cb2-out-1'] } }, { event: 'cb3', __test: { callback: { returns: ['cb3-out-1'] } } }, 'cb4'];
+    p[i].repeat = 2;
+    
+    p[++i] = ['cbs1', { event: 'cbs2', __test: { pass: ['cbs2-out-1', 'cbs2-out-1'] } }, { event: 'cbs3', type: 'sync', __test: { callback: { returns: ['cbs3-out-1'] } } }, 'cbs4'];
+    p[i].repeat = 2;
+
     p[++i] = ['one', 'two', 'three'];
     p[i].repeat = 2;
     
