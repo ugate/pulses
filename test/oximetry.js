@@ -11,7 +11,7 @@ var PulseEmitter = pulses.PulseEmitter;
 
 // node -e "require('./test/oximetry').runDefault()"
 // node -e "require('./test/oximetry')(require('./test/cases/prog.test')())"
-// node -e "require('./test/oximetry')([require('./test/cases/repeat.complex.json')])"
+// node -e "require('./test/oximetry')([require('./test/cases/test1.json')])"
 var oximetry = module.exports = run;
 oximetry.runDefault = runDefault;
 
@@ -148,14 +148,16 @@ function retrofit(diode) {
         var args = arguments, cb = args.length ? args[args.length - 1] : null;
         assert.ok(typeof cb === 'function', 'last argument is not a valid callback function: ' + util.inspect(args));
         plet.defer(function immediateCb() {
-            var argsr = [diode.test.retrofit.error || null];
-            if (diode.test.retrofit.args) argsr.push.apply(argsr, diode.test.retrofit.args);
+            var argsr = diode.test.retrofit.args;
             /*console.log('================ retrofit io ======================');
             console.dir(args);
             console.dir(argsr);
             console.log('===================================================');*/
-            diode.probe.pass.push.apply(diode.probe.pass, argsr);
-            cb.apply(null, argsr);
+            if (argsr && argsr.length) {
+                if (argsr[0] instanceof Error) diode.probe.oxm.read(diode.probe.markerError, false, 1, true);
+                diode.probe.pass.push.apply(diode.probe.pass, argsr);
+                cb.apply(null, argsr);
+            } else cb();
         });
     }, diode.test.retrofit.type || 'callback');
 }
@@ -237,19 +239,19 @@ function Oximeter(opts) {
     };
     
     /**
-     * Reads emission results for pulse saturation levels
+     * Reads/compares actual readings against the expected readings emission results for pulse saturation levels
      * 
      * @arg {*} id a unique marker identifier for the pulse emission
      * @arg {Boolean} chk true to validate the reading
      * @arg {*} value the value to read
      */
-    oxm.read = function read(id, chk, value) {
+    oxm.read = function read(id, chk, value, isCb) {
         var ia = value === null || isNaN(value), t = ia ? 'act' : 'exp', v = ia ? 1 : value || 1;
         if (!rds[id]) {
             rds[id] = { exp: 0, act: 0 };
         }
         rds[id][t] += v;
-        rds[t] += v;
+        if (!isCb) rds[t] += v;
         console.log(id + ': exp ' + rds[id].exp + ' act ' + rds[id].act + ' (' + rds.exp + '/' + rds.act + ')');
         if (chk && rds.act >= rds.exp) {
             clearTimeout(iid);
@@ -333,9 +335,12 @@ function Probe(oxm, slot, hemo, emOpts) {
     probe.data = [];
     probe.pass = [];
     probe.count = 0;
+    probe.expErrCnt = 0;
+    probe.actErrCnt = 0;
     probe.test = hemo.__test || {};
     probe.last = { pos: -1, cnt: 0, rpt: 0 };
     probe.marker = (hemo.id ? hemo.id + ' ' : '') + 'Test[' + probe.slot + ']';
+    probe.markerError = probe.marker + ' ' + probe.emitter.options.errorEvent;
     probe.diodes = {};
     
     /**
@@ -348,6 +353,9 @@ function Probe(oxm, slot, hemo, emOpts) {
         for (var t = 0, pe = probe.hemo.events || probe.hemo, tl = pe.length; t < tl; t++) {
             hasEnd = detect(new Diode(probe, t, pe[t], pe)).isEnd || hasEnd;
         }
+        probe.emitter.at(probe.emitter.options.errorEvent, function testErrorListener(err) { // validate errors
+            if (err instanceof Error) probe.oxm.read(probe.markerError, true, null, true);
+        });
         hasEnd = hasEnd || detect(new Diode(probe, -1, probe.emitter.options.endEvent));
         return hasEnd;
     };

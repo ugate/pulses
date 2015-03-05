@@ -131,7 +131,7 @@ PulseEmitter.prototype.to = function to(evts) {
  * @returns {PulseEmitter} the pulse emitter
  */
 PulseEmitter.prototype.emitAsync = function emitAsync(evts) {
-    return plet.asyncd(this, evts, 'emit', arguments, this.emitAsync);
+    return plet.asyncd(this, evts, 'emit', arguments.length > emitAsync.length ? Array.prototype.slice.call(arguments, emitAsync.length) : null);
 };
 
 PulseEmitter.prototype.cb = function cb(fn) {
@@ -152,11 +152,12 @@ PulseEmitter.prototype.cb = function cb(fn) {
  * @arg {Boolean} [async] true to emit the error asynchronously
  * @arg {Boolean} [end] true to emit the end event set in the pulse emitter's options
  * @arg {Array} [ignores] array of error.code that will be ignored
+ * @arg {*[]} [arguments] arguments passed to the emitter
  * @returns {Error} the error when emission has occurred or undefined when it has not
  */
-PulseEmitter.prototype.error = function error(err, async, end, ignore) {
+PulseEmitter.prototype.error = function emitError(err, async, end, ignores) {
     if (err && (!ignores || !err.code || !!~ignores.indexOf(err.code))) {
-        var args = arguments.length > this.error.length ? Array.prototype.slice.call(arguments, this.error.length) : null;
+        var args = arguments.length > emitError.length ? Array.prototype.slice.call(arguments, emitError.length) : null;
         var m = async ? this.emitAsync : this.emit;
         if (args) {
             var ea = [this.options.errorEvent, err];
@@ -186,19 +187,17 @@ PulseEmitter.prototype.error = function error(err, async, end, ignore) {
  */
 function listen(pw, type, listener, fnm, rf) {
     var fn = function pulseListener(flow, artery, pulse) {
-        if (rf && (!(artery instanceof cat.Artery) || !(pulse instanceof cat.Pulse))) {
-            return; // not a pulse event
-        }
-        var args = arguments, argi = 1;
+        if (!rf || !(artery instanceof cat.Artery) || !(pulse instanceof cat.Pulse) || flow instanceof Error)
+            return arguments.length ? fn._callback.apply(this, Array.prototype.slice.call(arguments)) : fn._callback();
+        var args = arguments, argi = 1; // never pass flow into listeners
         if (rf === 'callback') {
             var ua = args.length > fn.length, fl = ua ? fn.length : 0, argsp = ua ? args : artery.pass;
-            hark(pw, artery, pulse, argsp, fl, fl, fn._callback, function retrofitCb(err) { // last argument should be the callback function
-                if (err instanceof Error) flow.pause(function retrofitErr() {
-                    hark(pw, artery, pulse, err);
-                });
-                if (arguments.length) arguments.length === 1 ? artery.pass.push(arguments[0]) : artery.pass.push.apply(artery.pass, arguments);
+            hark(pw, artery, pulse, null, argsp, fl, fl, fn._callback, function retrofitCb(err) { // last argument should be the callback function
+                if (err instanceof Error) hark(pw, artery, pulse, err); // emit any callback errors
+                if (arguments.length === 1) artery.pass.push(arguments[0]);
+                else if (arguments.length) artery.pass.push.apply(artery.pass, Array.prototype.slice.call(arguments));
             });
-        } else hark(pw, artery, pulse, args, fn.length, argi, fn._callback);
+        } else hark(pw, artery, pulse, null, args, fn.length, argi, fn._callback);
     };
     fn._callback = listener;
     return PulseEmitter.super_.prototype[fnm || 'addListener'].call(pw, type, fn);
@@ -219,28 +218,21 @@ function listen(pw, type, listener, fnm, rf) {
  * @arg {*} [lastArg] pushes argument to the end of the arguments passed into the callback
  * @returns {*} the callback's return value or error object when an error is passed in as args
  */
-function hark(pw, artery, pulse, args, fl, ai, cb, lastArg) {
-    var err = args instanceof Error, al = err ? 0 : args.length, argsp = args;
+function hark(pw, artery, pulse, err, args, fl, ai, cb, lastArg) {
+    var al = err ? 0 : args.length, argsp = args, emitErrs;
     if (al > fl) {
         argsp = isNaN(ai) ? args : Array.prototype.slice.call(args, ai);
         if (lastArg) argsp.push(lastArg);
-    } 
-    if (pulse.emitErrors || (pulse.emitErrors !== false && artery.emitErrors) || 
-            (pulse.emitErrors !== false && artery.emitErrors !== false && pw.options && pw.options.emitErrors)) {
+    }
+    if (err || (emitErrs = pulse.emitErrors || (pulse.emitErrors !== false && artery.emitErrors) || 
+            (pulse.emitErrors !== false && artery.emitErrors !== false && pw.options && pw.options.emitErrors))) {
         try {
             if (err) throw err;
             return al > fl ? cb.apply(pw, argsp) : cb.call(pw, artery, pulse);
         } catch (e) {
-            e.emitter = {
-                listener: cb,
-                artery: artery,
-                pulse: pulse,
-                arguments: al > fl ? Array.prototype.slice.apply(args, fl): null
-            };
-            return pw.error(e);
+            return pw.error(e, !/^[^a]{0,}sync/i.test(pulse.type), !emitErrs, null, artery, pulse);
         }
     }
-    if (err) throw err;
     return al > fl ? cb.apply(pw, argsp) : cb.call(pw, artery, pulse);
 }
 
