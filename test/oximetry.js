@@ -15,16 +15,30 @@ var PulseEmitter = pulses.PulseEmitter;
 var oximetry = module.exports = run;
 oximetry.runDefault = runDefault;
 
-var maxTestMsDflt = 1000;
+var maxTestMsDflt = 10000;
+
+/**
+ * Test data
+ * 
+ * @example Passing *1, 2, 3*
+ * __test: { pass: [1, 2, 3] }
+ * @example Retrofitting a callback pattern that will pass the arguments *'a', 'b', 'c'*
+ * __test: { retrofit: { args: ['a', 'b', 'c'] } }
+ * @callback test
+ * @arg {*[]} [pass] an array of test arguments that will be added to the **artery.pass** when the listener detects event emission
+ * @arg {Object} [retrofit] an object that indicates that the listener should be retrofitted to accommodate callbacks, etc.
+ * @arg {String} [retrofit.type=callback] the typeof retrofit
+ * @arg {*[]} [retrofit.args] an array of arguments that will be passed to the callback (typically the first argument should be an Error or null)
+ */
 
 /**
  * Runs one or more tests against the supplied array of pulse emitter events
  *
  * @see {@link PulseEmitter#to}
  * @arg {(Object | Array)} [options={}] the options or an array that represents the options.tests
- * @arg {Array} [options.tests] an array of pulse emitter test cases each of which will be passed into a newly generated pulse emitter's "to" function
- * @arg {function} [options.listener] an optional function that will be called on every pulse emitter emission
- * @arg {Integer} [options.maxWaitMs] maximum number of millisecods to wait for the tests to complete (in case events are not emitted)
+ * @arg {test[]} [options.tests] an array of pulse emitter test cases each of which will be passed into a newly generated pulse emitter's control flow chain
+ * @arg {function} [options.listener] a function that will be called on every pulse emitter emission
+ * @arg {Number} [options.maxWaitMs=10000] the maximum number of milliseconds to wait for an emission response before aborting pulse detections
  * @arg {Object} emOpts the options passed to generated pulse emitters
  */
 function run(options, emOpts) {
@@ -33,10 +47,7 @@ function run(options, emOpts) {
 
 /**
  * Requires each of the files within the "cases" directory and appends them as test cases. If the file exports a function the function will
- * be called and should return an array or object that will be appended to the commulative test cases. Each test case can contain a **__test**
- * object with a **pass** array of arguments that will be set via the listener using **artery.pass**. For example, to pass *1, 2, 3*:
- * 
- * __test: { pass: [1, 2, 3] }
+ * be called and should return an array or object that will be appended to the commulative test cases.
  * 
  * @see {@link run}
  * @arg {Object} [options={}] the run options minus the test cases
@@ -63,6 +74,13 @@ function runDefault(options) {
     });
 }
 
+/**
+ * Asserts and tracks the progress of a diodes lifespan by listening for the diode's event
+ * 
+ * @private
+ * @arg {Diode} diode the encapsulated event data that will be used to test against incoming arteries/pulses
+ * @returns {Diode} the passed diode
+ */
 function detect(diode) {
     var probe = diode.probe;
     retrofit(diode);
@@ -118,14 +136,20 @@ function detect(diode) {
     return diode;
 }
 
+/**
+ * Retrofits a diode for use with callbacks, etc.
+ * 
+ * @private
+ * @arg {Diode} diode the encapsulated event data that will be used to test against incoming arteries/pulses
+ */
 function retrofit(diode) {
-    if (!diode.test.callback) return;
+    if (!diode.test.retrofit) return;
     diode.probe.emitter.at(diode.heme.event, function cbTest() {
         var args = arguments, cb = args.length ? args[args.length - 1] : null;
         assert.ok(typeof cb === 'function', 'last argument is not a valid callback function: ' + util.inspect(args));
         plet.defer(function immediateCb() {
-            var argsr = [diode.test.callback.error || null];
-            if (diode.test.callback.returns) argsr.push.apply(argsr, diode.test.callback.returns);
+            var argsr = [diode.test.retrofit.error || null];
+            if (diode.test.retrofit.args) argsr.push.apply(argsr, diode.test.retrofit.args);
             /*console.log('================ retrofit io ======================');
             console.dir(args);
             console.dir(argsr);
@@ -133,28 +157,70 @@ function retrofit(diode) {
             diode.probe.pass.push.apply(diode.probe.pass, argsr);
             cb.apply(null, argsr);
         });
-    }, 'callback');
+    }, diode.test.retrofit.type || 'callback');
 }
 
+/**
+ * Arteries are generated based upon a pre-defined set of properties that have inherit restrictions enforced on their values
+ *
+ * @private
+ * @arg {(String | Object | *[])} src the source artery definition that will transformed
+ * @returns {Object} an artery-like object with a randomly generated identifier
+ */
 function arterylet(src) {
     return cat.arterylet(hemit(src));
 }
 
+/**
+ * Pulses are generated based upon a pre-defined set of properties that have inherit restrictions enforced on their values
+ *
+ * @private
+ * @arg {object} artery an artery-like object
+ * @arg {(String | Object)} event either the event name or an object that contains an event property
+ * @arg {String} endEvent the event that represents an end to the control flow chain
+ * @returns {Object} an pulse-like object with a randomly generated identifier (unless it's representing an end event)
+ */
 function pulselet(artery, event, endEvent) {
     return cat.pulselet(artery, event === endEvent ? event : hemit(event, null, endEvent), endEvent);
 }
 
+/**
+ * Transfoms the passed element into an object, if needed, and sets a radomly generated *id* property (or the passed identify value; nothing set for end events)
+ * 
+ * @arg {(String | Object)} o either the event name or an object that contains an event property
+ * @arg {*} [id] an explicit identifier to set
+ * @arg {String} endEvent the event that represents an end to the control flow chain
+ * @returns {Object} the transformed object
+ */
 function hemit(o, id, endEvent) {
     o = typeof o === 'string' ? { event: o } : o;
     if ((!endEvent || o.event !== endEvent) && !o.id) o.id = id || (Math.random() * 10000 >> 0);
     return o;
 }
 
+/**
+ * A calibrated instrument used to detect the saturation levels of pulse events and measures the accuracy of its emission
+ * 
+ * @class
+ * @private
+ * @arg {(Object | Array)} [opts={}] the options or an array that represents the opts.tests
+ * @arg {test[]} [opts.tests] an array of pulse emitter test cases each of which will be passed into a newly generated pulse emitter's control flow chain
+ * @arg {function} [opts.listener] a function that will be called on every pulse emitter emission
+ * @arg {Number} [opts.maxWaitMs=10000] the maximum number of milliseconds to wait for an emission response before aborting pulse detections
+ */
 function Oximeter(opts) {
     var oxm = this, probes = [], iid, maxWaitMs = typeof opts.maxWaitMs === null || isNaN(opts.maxWaitMs) ? maxTestMsDflt : opts.maxWaitMs;
     var rds = { exp: 0, act: 0 };
     oxm.listener = opts.listener;
     oxm.arteries = [];
+    
+    /**
+     * Begins pulse emission/detection on multiple control flow chains
+     * 
+     * @arg {Object} the hemo/artery-like object definition to start detection on
+     * @arg {Object} emOpts the options passed to generated pulse emitters
+     * @returns {Integer} the number of probes generated/executed
+     */
     oxm.begin = function begin(hemo, emOpts) {
         banner('listening');
         for (var p = 0, pl = hemo.length; p < pl; p++) {
@@ -169,6 +235,14 @@ function Oximeter(opts) {
         }
         return probes.length;
     };
+    
+    /**
+     * Reads emission results for pulse saturation levels
+     * 
+     * @arg {*} id a unique marker identifier for the pulse emission
+     * @arg {Boolean} chk true to validate the reading
+     * @arg {*} value the value to read
+     */
     oxm.read = function read(id, chk, value) {
         var ia = value === null || isNaN(value), t = ia ? 'act' : 'exp', v = ia ? 1 : value || 1;
         if (!rds[id]) {
@@ -182,6 +256,13 @@ function Oximeter(opts) {
             validate(true);
         }
     };
+    
+    /**
+     * Validates the current state of previous read operations and stops detection
+     * 
+     * @private
+     * @arg {Boolean} forced whether or not the validation has been manually invoked
+     */
     function validate(forced) {
         assert.ok(rds.exp > 0, 'Nothing ran');
         assert.ok(rds.act > 0, 'Expected ' + rds.exp + ' to run, but nothing ran');
@@ -191,15 +272,36 @@ function Oximeter(opts) {
         }
         stop();
     }
-    function start(probing) {
+    
+    /**
+     * Starts read detections
+     * 
+     * @private
+     */
+    function start() {
         banner('emitting');
         rds.start = process.hrtime();
     }
+    
+    /**
+     * Stops read detections
+     * 
+     * @private
+     */
     function stop() {
         rds.finish = process.hrtime(rds.start);
         rds.ms = (rds.finish[0] * 1e9 + rds.finish[1]) / 1000000;
         banner('Completed %s/%s tests in %s ms', rds.act, rds.exp, rds.ms);
     }
+    
+    /**
+     * Activates reads for incoming arteries/pulses on the defined hemo/artery-like definition
+     * 
+     * @private
+     * @arg {Object} the hemo/artery-like object definition to activate reads on
+     * @arg {Object} emOpts the options passed to generated pulse emitters
+     * @returns {Probe} the generated probe that is performing reads
+     */
     function activate(hemo, emOpts) {
         hemo.count = 1; // override default count
         var probe = new Probe(oxm, probes.length, hemo, emOpts);
@@ -211,6 +313,16 @@ function Oximeter(opts) {
     Object.seal(oxm);
 }
 
+/**
+ * Probe used to detect pulse emissions for a single control flow chain
+ * 
+ * @class
+ * @private
+ * @arg {Oximeter} oxm the oximeter that the probe is connected to
+ * @arg {Integer} slot the unique slot number that the probe is assigned to on the oximeter
+ * @arg {Object} hemo the artery-like definition fed to the probe
+ * @arg {Object} emOpts the options passed to generated pulse emitters
+ */
 function Probe(oxm, slot, hemo, emOpts) {
     var probe = this;
     Object.freeze(probe.emitter = new PulseEmitter(emOpts));
@@ -225,6 +337,12 @@ function Probe(oxm, slot, hemo, emOpts) {
     probe.last = { pos: -1, cnt: 0, rpt: 0 };
     probe.marker = (hemo.id ? hemo.id + ' ' : '') + 'Test[' + probe.slot + ']';
     probe.diodes = {};
+    
+    /**
+     * Activates the probe by generating all the corresponding diodes that are ready to start taking measurements
+     * 
+     * @returns {Boolean} true when an end diode has been generated
+     */
     probe.activate = function activate() {
         var hasEnd = false;
         for (var t = 0, pe = probe.hemo.events || probe.hemo, tl = pe.length; t < tl; t++) {
@@ -233,6 +351,13 @@ function Probe(oxm, slot, hemo, emOpts) {
         hasEnd = hasEnd || detect(new Diode(probe, -1, probe.emitter.options.endEvent));
         return hasEnd;
     };
+    
+    /**
+     * Reads the passed diode measurement
+     * 
+     * @arg {Diode} diode the diode that took the reading
+     * @arg {Boolean} register true to indicate the read is a result of initializing the diode 
+     */
     probe.read = function read(diode, register) {
         var v = register ? diode.isEnd ? 1 : probe.hemo.repeat * diode.heme.repeat : null;
         probe.oxm.read(probe.marker + ' ' + diode.marker, !register && diode.isEnd, v);
@@ -240,6 +365,16 @@ function Probe(oxm, slot, hemo, emOpts) {
     Object.seal(probe);
 }
 
+/**
+ * Diode used to detect pulse emissions for a single type of event
+ * 
+ * @class
+ * @private
+ * @arg {Probe} probe the probe the diode is connected to
+ * @arg {Integer} slot the unique slot number that the diode is assigned to on the probe
+ * @arg {(String | Object)} event either the event name or an object with an event name that indicates what the diode will be measuring emissions for
+ * @arg {Object} events the probe's hemo events that designates the source of the diodes origin at the given slot
+ */
 function Diode(probe, slot, event, events) {
     var diode = this, pcnt;
     diode.probe = probe;
@@ -251,6 +386,14 @@ function Diode(probe, slot, event, events) {
     diode.isEnd = diode.heme.event === diode.probe.emitter.options.endEvent;
     diode.count = 0;
     diode.marker = (diode.heme.id || '') + ' ' + diode.heme.event + (!!~diode.slot ? '[' + diode.slot + ']' : '');
+    
+    /**
+     * Absorbs/reads an artery/pulse for measurement
+     * 
+     * @arg {Object} artery the artery being measured
+     * @arg {Object} pulse the pulse being measured
+     * @returns {Object} object that indicates if the reading is bleeding out from unrelated arteries
+     */
     diode.absorb = function absorb(artery, pulse) {
         var plst = diode.probe.last;
         diode.count++;
@@ -274,6 +417,15 @@ function Diode(probe, slot, event, events) {
     Object.seal(diode);
 }
 
+/**
+ * Determines if an artery exists in other slots
+ * 
+ * @private
+ * @arg {Object} artery the artery being measured
+ * @arg {Oximeter} oximeter the oximeter taking the measurement
+ * @arg {Integer} slot the unique slot number that the artery's probe is assigned to on the oximeter
+ * @returns {Object} object that indicates if the reading is bleeding out from unrelated arteries
+ */
 function bleeding(artery, oximeter, slot) {
     if (!oximeter.arteries[slot]) {
         oximeter.arteries[slot] = artery;
@@ -287,6 +439,12 @@ function bleeding(artery, oximeter, slot) {
     return Object.freeze({ slot: slot, other: slot });
 }
 
+/**
+ * Console banner output
+ * 
+ * @private
+ * @arg {...*} arguments the arguments that will be formatted in the console output
+ */
 function banner() {
     console.log('------------ %s ------------', util.format.apply(util.format, arguments));
 }
