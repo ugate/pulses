@@ -148,28 +148,16 @@ PulseEmitter.prototype.cb = function cb(fn) {
  * Handles errors by emitting the corresponding event(s)
  * 
  * @emits the error event set in the pulse emitter's options passing in the {Error} in error listeners
- * @arg {Error} err the error to emit proceeded by an end event when "end" is true
- * @arg {Boolean} [async] true to emit the error asynchronously
- * @arg {Boolean} [end] true to emit the end event set in the pulse emitter's options
- * @arg {Array} [ignores] array of error.code that will be ignored
- * @arg {*[]} [arguments] arguments passed to the emitter
+ * @arg {Error} err the error to emit
+ * @arg {*} [async] truthy for determining emission type (strings that end with *sync*, but not *async* will emit synchronously)
+ * @arg {Boolean} [end] true to emit the end event set in the pulse emitter's options after error emission
+ * @arg {*[]} [ignores] array of error.code that will be ignored
+ * @arg {...*} [arguments] arguments passed to the emitter (error will always be the first argument passed)
  * @returns {Error} the error when emission has occurred or undefined when it has not
  */
-PulseEmitter.prototype.error = function emitError(err, async, end, ignores) {
-    if (err && (!ignores || !err.code || !!~ignores.indexOf(err.code))) {
-        var args = arguments.length > emitError.length ? Array.prototype.slice.call(arguments, emitError.length) : null;
-        var m = async ? this.emitAsync : this.emit;
-        if (args) {
-            var ea = [this.options.errorEvent, err];
-            ea.push.apply(ea, args);
-            m.apply(this, ea);
-            if (end) m.apply(this, ea);
-        } else {
-            m.call(this, this.options.errorEvent, err);
-            if (end) m.call(this, this.options.endEvent, err);
-        }
-        return err;
-    }
+PulseEmitter.prototype.error = function errored(err, async, end, ignores) {
+    var args = arguments.length > errored.length ? Array.prototype.slice.call(arguments, errored.length) : null;
+    return emitError(err, async, args, end, ignores);
 };
 
 /**
@@ -189,51 +177,55 @@ function listen(pw, type, listener, fnm, rf) {
     var fn = function pulseListener(flow, artery, pulse) {
         if (!rf || !(artery instanceof cat.Artery) || !(pulse instanceof cat.Pulse) || flow instanceof Error)
             return arguments.length ? fn._callback.apply(this, Array.prototype.slice.call(arguments)) : fn._callback();
-        var args = arguments, argi = 1; // never pass flow into listeners
-        if (rf === 'callback') {
-            var ua = args.length > fn.length, fl = ua ? fn.length : 0, argsp = ua ? args : artery.pass;
-            hark(pw, artery, pulse, null, argsp, fl, fl, fn._callback, function retrofitCb(err) { // last argument should be the callback function
-                if (err instanceof Error) hark(pw, artery, pulse, err); // emit any callback errors
+        var isRfCb = rf === 'callback', emitErrs = pulse.emitErrors || (pulse.emitErrors !== false && artery.emitErrors) || 
+            (pulse.emitErrors !== false && artery.emitErrors !== false && pw.options && pw.options.emitErrors);
+        var args = arguments.length > fn.length ?  Array.prototype.slice.call(arguments, isRfCb ? fn.length : 1) : null;
+        if (isRfCb) {
+            (args = args || []).push(function retrofitCb(err) { // last argument should be the callback function
+                if (err instanceof Error) emitError(pw, err, pulse.type, [artery, pulse]); // emit any callback errors
                 if (arguments.length === 1) artery.pass.push(arguments[0]);
                 else if (arguments.length) artery.pass.push.apply(artery.pass, Array.prototype.slice.call(arguments));
             });
-        } else hark(pw, artery, pulse, null, args, fn.length, argi, fn._callback);
+        }
+        if (emitErrs) {
+            try {
+                args && args.length ? fn._callback.apply(pw, args) : fn._callback.call(pw, artery, pulse);
+            } catch (e) {
+                emitError(pw, e, pulse.type, [artery, pulse]);
+            }
+        } else args && args.length ? fn._callback.apply(pw, args) : fn._callback.call(pw, artery, pulse);
     };
     fn._callback = listener;
     return PulseEmitter.super_.prototype[fnm || 'addListener'].call(pw, type, fn);
 }
 
 /**
- * Handles callback execution with error handling/detection
+ * Handles errors by emitting the corresponding event(s)
  * 
  * @private
+ * @emits the error event set in the pulse emitter's options passing in the {Error} in error listeners
  * @arg {PulseEmitter} pw the pulse emitter
- * @arg {Object} artery the event chain object
- * @arg {Object} pulse the event object
- * @arg {(*[] | Error)} args the array of arguments that will be assessed for passing into the callback or an error to emit or throw
- * @arg {Integer} [fl] the length to check against the passed args length to determine if the arguments need to be passed 
- *                      (when args is not an error this may increase performance)
- * @arg {Integer} [ai] the index to slice the args before passing to the callback
- * @arg {function} [cb] the callback function that will be invoked using the passed args (not applicable if the args is an error)
- * @arg {*} [lastArg] pushes argument to the end of the arguments passed into the callback
- * @returns {*} the callback's return value or error object when an error is passed in as args
+ * @arg {Error} err the error to emit
+ * @arg {*} [async] truthy for determining emission type (strings that end with *sync*, but not *async* will emit synchronously)
+ * @arg {*[]} [args] additional arguments to pass into the emission (first argument will always be the error)
+ * @arg {Boolean} [end] true to emit the end event set in the pulse emitter's options after error emission
+ * @arg {*[]} [ignores] array of error.code that will be ignored
+ * @returns {Error} the error when emission has occurred or undefined when it has not
  */
-function hark(pw, artery, pulse, err, args, fl, ai, cb, lastArg) {
-    var al = err ? 0 : args.length, argsp = args, emitErrs;
-    if (al > fl) {
-        argsp = isNaN(ai) ? args : Array.prototype.slice.call(args, ai);
-        if (lastArg) argsp.push(lastArg);
-    }
-    if (err || (emitErrs = pulse.emitErrors || (pulse.emitErrors !== false && artery.emitErrors) || 
-            (pulse.emitErrors !== false && artery.emitErrors !== false && pw.options && pw.options.emitErrors))) {
-        try {
-            if (err) throw err;
-            return al > fl ? cb.apply(pw, argsp) : cb.call(pw, artery, pulse);
-        } catch (e) {
-            return pw.error(e, !/^[^a]{0,}sync/i.test(pulse.type), !emitErrs, null, artery, pulse);
+function emitError(pw, err, async, args, end, ignores) {
+    if (err && (!ignores || !err.code || !!~ignores.indexOf(err.code))) {
+        var m = (typeof async === 'string' && !/^[^a]{0,}sync/i.test(async)) || async ? pw.emitAsync : pw.emit;
+        if (args) {
+            var ea = [pw.options.errorEvent, err];
+            ea.push.apply(ea, args);
+            m.apply(pw, ea);
+            if (end) m.apply(pw, ea);
+        } else {
+            m.call(pw, pw.options.errorEvent, err);
+            if (end) m.call(pw, pw.options.endEvent, err);
         }
+        return err;
     }
-    return al > fl ? cb.apply(pw, argsp) : cb.call(pw, artery, pulse);
 }
 
 function bind(emr, que) {

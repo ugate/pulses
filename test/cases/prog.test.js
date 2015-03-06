@@ -23,6 +23,6 @@ module.exports = function progTests() {
     p[++i] = { events: ['one-2', 'two-2', 'three-2'], type: 'sync', __test: { pass: ['E', 'F', 'G'] } };
     
     p[++i] = { events: ['one-3', 'two-3', { event: 'three-3', type: 'sync', __test: { pass: ['1', 2, '3', true] } }, { event: 'four-3', type: 'sync' }] };
-
+    
     return p;
 };
