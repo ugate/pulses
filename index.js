@@ -7,7 +7,7 @@ var cat = require('./lib/catheter.js');
 
 util.inherits(PulseEmitter, events.EventEmitter);
 
-var pulses = exports;
+var pulses = exports, catType = 'internal';
 pulses.PulseEmitter = PulseEmitter;
 pulses.mergeObject = plet.merge;
 
@@ -119,7 +119,10 @@ PulseEmitter.prototype.at = function at(type, listener, retrofit) {
  * @returns {PulseEmitter} the pulse emitter
  */
 PulseEmitter.prototype.to = function to(evts) {
-    var fl = this.to.length, iv = cat(this, arguments.length > fl ? Array.prototype.slice.call(arguments, fl) : null);
+    var fl = this.to.length, pw = this;
+    var iv = cat(pw, function toListener(type, listener) {
+        listen(pw, type, listener, null, true, catType);
+    }, arguments.length > fl ? Array.prototype.slice.call(arguments, fl) : null);
     iv.pump(evts, true);
 };
 
@@ -173,7 +176,7 @@ PulseEmitter.prototype.error = function errored(err, async, end, ignores) {
  *                          accordingly)
  * @returns {PulseEmitter} the pulse emitter
  */
-function listen(pw, type, listener, fnm, rf) {
+function listen(pw, type, listener, fnm, rf, cbtype) {
     var fn = function pulseListener(flow, artery, pulse) {
         if (!rf || !(artery instanceof cat.Artery) || !(pulse instanceof cat.Pulse) || flow instanceof Error)
             return arguments.length ? fn._callback.apply(this, Array.prototype.slice.call(arguments)) : fn._callback();
@@ -196,6 +199,7 @@ function listen(pw, type, listener, fnm, rf) {
         } else args && args.length ? fn._callback.apply(pw, args) : fn._callback.call(pw, artery, pulse);
     };
     fn._callback = listener;
+    if (cbtype) fn._cbtype = cbtype;
     return PulseEmitter.super_.prototype[fnm || 'addListener'].call(pw, type, fn);
 }
 
