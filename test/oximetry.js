@@ -144,15 +144,17 @@ function detect(diode) {
  */
 function retrofit(diode) {
     if (!diode.test.retrofit) return;
+    diode.probe.oxm.read(diode.probe.markerCb, false, diode.probe.hemo.repeat * diode.heme.repeat, true);
     diode.probe.emitter.at(diode.heme.event, function cbTest() {
+        diode.probe.oxm.read(diode.probe.markerCb, true, null, true);
         var args = arguments, cb = args.length ? args[args.length - 1] : null;
         assert.ok(typeof cb === 'function', 'last argument is not a valid callback function: ' + util.inspect(args));
         plet.defer(function immediateCb() {
             var argsr = diode.test.retrofit.args;
-            /*console.log('================ retrofit io ======================');
+            console.log('================ %s retrofit i/o ======================', diode.heme.event);
             console.dir(args);
             console.dir(argsr);
-            console.log('===================================================');*/
+            console.log('====================================================');
             if (argsr && argsr.length) {
                 if (argsr[0] instanceof Error) diode.probe.oxm.read(diode.probe.markerError, false, 1, true);
                 diode.probe.pass.push.apply(diode.probe.pass, argsr);
@@ -340,6 +342,7 @@ function Probe(oxm, slot, hemo, emOpts) {
     probe.test = hemo.__test || {};
     probe.last = { pos: -1, cnt: 0, rpt: 0 };
     probe.marker = (hemo.id ? hemo.id + ' ' : '') + 'Test[' + probe.slot + ']';
+    probe.markerCb = probe.marker + ' callback';
     probe.markerError = probe.marker + ' ' + probe.emitter.options.errorEvent;
     probe.diodes = {};
     
@@ -353,7 +356,8 @@ function Probe(oxm, slot, hemo, emOpts) {
         for (var t = 0, pe = probe.hemo.events || probe.hemo, tl = pe.length; t < tl; t++) {
             hasEnd = detect(new Diode(probe, t, pe[t], pe)).isEnd || hasEnd;
         }
-        probe.emitter.at(probe.emitter.options.errorEvent, function testErrorListener(err) { // validate errors
+        probe.emitter.at(probe.emitter.options.errorEvent, function testErrorListener(err, artery, pulse) { // validate errors
+            if (artery.id !== probe.hemo.id) return;
             if (err instanceof Error) probe.oxm.read(probe.markerError, true, null, true);
         });
         hasEnd = hasEnd || detect(new Diode(probe, -1, probe.emitter.options.endEvent));
