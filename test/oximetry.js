@@ -274,6 +274,7 @@ function Oximeter(opts) {
             assert.strictEqual(rds[id].act, rds[id].exp, id + ' expected ' + rds[id].exp + ', but found ' + 
                 rds[id].act + (forced ? '' : ' after waiting for ' + maxWaitMs + ' ms'));
         }
+        //console.log(process._getActiveHandles());
         stop();
     }
     
