@@ -233,7 +233,7 @@ function Oximeter(opts) {
         iid = setTimeout(validate, maxWaitMs);
         start();
         for (var i = 0, l = probes.length, arr; i < l; i++) {
-            arr = [hemo[i]];
+            arr = [hemo[i], probes[i].test.inboundTarget];
             if (probes[i].test.pass) arr.push.apply(arr, probes[i].test.pass);
             probes[i].emitter.to.apply(probes[i].emitter, arr);
         }

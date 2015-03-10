@@ -91,14 +91,24 @@ PulseEmitter.prototype.at = function at(type, listener, retrofit) {
  * @arg {Object} artery event chain state
  * @arg {String} artery.type the emission execution type applied to the event chain- async, sync, fork, spawn, exec
  * @arg {Integer} artery.repeat the number of times that the event chain will/has been repeated
- * @arg {*} [artery.id] an arbitrary identifier assigned to the event chain
  * @arg {*[]} artery.data a mutable array for storing data throughout the life-cycle of the event chain
- * @arg {*[]} artery.pass a mutable array for adding arguments that will be passed into the next listener functions in the event chain (cleared after the each emission) 
+ * @arg {*[]} artery.pass a mutable array for adding arguments that will be passed into the next listener functions in the event chain (cleared after the each emission)
+ * @arg {*} [artery.id] an identifier assigned to the event chain
+ * @arg {Object} [artery.inbound] an object that defines how external events interact with event chain continuity
+ * @arg {String} [artery.inbound.event] the event name to listen for on an inbound target selection that, when triggered, will capture results and possibly continue event chain execution
+ * @arg {Integer} [artery.inbound.repeat] the number of times that the inbound event will be captured before resuming event chain execution
+ * @arg {Number} [artery.inbound.debounce] duration period in milliseconds to wait before counting consecutive inbound events towards the inbound repeat value
+ * @arg {String} [artery.inbound.selector] the query selector applied to an inbound target that captures the element(s) that will be listened to (browser only)
  * @arg {Object} pulse the current event state
  * @arg {String} pulse.event the event name
  * @arg {String} pulse.type the event type
  * @arg {Integer} pulse.repeat the number of times that the event will/has been repeated
  * @arg {*} [pulse.id] an arbitrary identifier assigned to the individual event
+ * @arg {Object} [pulse.inbound] an object that defines how external events interact with the current event's continuity in relation to the event chain
+ * @arg {String} [pulse.inbound.event] the event name to listen for on an inbound target selection that, when triggered, will capture results and possibly continue event chain execution
+ * @arg {Integer} [pulse.inbound.repeat] the number of times that the inbound event will be captured before resuming event chain execution
+ * @arg {Number} [pulse.inbound.debounce] duration period in milliseconds to wait before counting consecutive inbound events towards the inbound repeat value
+ * @arg {String} [pulse.inbound.selector] the query selector applied to an inbound target that captures the element(s) that will be listened to (browser only)
  * @arg {...*} [arguments] additional arguments passed by the previous listener's artery.pass followed by any arguments passed during initial chain emission
  */
 
@@ -109,19 +119,30 @@ PulseEmitter.prototype.at = function at(type, listener, retrofit) {
  * @arg {String} [evts.type=async] the emission execution type applied to the event chain- async, sync, fork, spawn, exec (fork/spawn/exec will use Workers within browsers)
  * @arg {Integer} [evts.repeat=1] the number of times that the event chain will be repeated
  * @arg {*} [evts.id] an arbitrary identifier assigned to the event chain
+ * @arg {Object} [evts.inbound] an object that defines how external events interact with event chain continuity
+ * @arg {String} [evts.inbound.event] the event name to listen for on an inbound target selection that, when triggered, will capture results and possibly continue event chain execution
+ * @arg {Integer} [evts.inbound.repeat] the number of times that the inbound event will be captured before resuming event chain execution
+ * @arg {Number} [evts.inbound.debounce] duration period in milliseconds to wait before counting consecutive inbound events towards the inbound repeat value
+ * @arg {String} [evts.inbound.selector] the query selector applied to an inbound target that captures the element(s) that will be listened to (browser only)
  * @arg {(Object | String)} evts[] either the event name or an object containing event properties
  * @arg {String} [evts[].event] the event name
  * @arg {String} [evts[].type] overrides the inherited type value from the event chain
  * @arg {Integer} [evts[].repeat] overrides the inherited repeat value from the event chain
  * @arg {*} [evts[].id] an arbitrary identifier assigned to the individual event
+ * @arg {Object} [evts[].inbound] an object that defines how external events interact with the current event's continuity in relation to the event chain
+ * @arg {String} [evts[].inbound.event] the event name to listen for on an inbound target selection that, when triggered, will capture results and possibly continue event chain execution
+ * @arg {Integer} [evts[].inbound.repeat] the number of times that the inbound event will be captured before resuming event chain execution
+ * @arg {Number} [evts[].inbound.debounce] duration period in milliseconds to wait before counting consecutive inbound events towards the inbound repeat value
+ * @arg {String} [evts[].inbound.selector] the query selector applied to an inbound target that captures the element(s) that will be listened to (browser only)
+ * @arg {Object} [inboundTarget] a target that will emit inbound event traffic to inbound pulse event listeners- can be a *EventTarget* (browser) or an *EventEmitter*
  * @arg {...*} [arguments] additional arguments appeneded to the arguments passed into the first listener in the chain
  * @returns {PulseEmitter} the pulse emitter
  */
-PulseEmitter.prototype.to = function to(evts) {
-    var fl = this.to.length, pw = this;
+PulseEmitter.prototype.to = function to(evts, inboundTarget) {
+    var fl = to.length, pw = this;
     var iv = cat(pw, function toListener(type, listener) {
         listen(pw, type, listener, null, true, catType);
-    }, arguments.length > fl ? Array.prototype.slice.call(arguments, fl) : null);
+    }, inboundTarget, arguments.length > fl ? Array.prototype.slice.call(arguments, fl) : null);
     iv.pump(evts, true);
 };
 

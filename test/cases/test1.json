@@ -9,7 +9,7 @@
     "json5",
     { "event": "json6", "parallel": 2 },
     "json7",
-    { "event": "json8", "target": { "event": "jsonIn" } },
+    { "event": "json8", "inbound": { "event": "jsonIn" } },
     "json9"
   ],
   "repeat": 2
