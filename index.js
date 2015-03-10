@@ -34,22 +34,21 @@ function PulseEmitter(options) {
  * @inheritdoc
  */
 PulseEmitter.prototype.listeners = function listeners(type) {
-    for (var i = 0, ls = PulseEmitter.super_.prototype.listeners.call(this, type), l = ls.length; i < l; i++) {
-        if (ls[i]._callback) ls.splice(i, 1, ls[i]._callback);
-    }
-    return ls;
+    return listeners(this, type, null, false);
 };
 
 /**
  * @inheritdoc
  */
 PulseEmitter.prototype.removeListener = function removeListener(type, listener) {
-    for (var i = 0, ls = PulseEmitter.super_.prototype.listeners.call(this, type), l = ls.length; i < l; i++) {
-        if (ls[i]._callback === listener) {
-            return PulseEmitter.super_.prototype.removeListener.call(this, type, ls[i]);
-        }
-    }
-    return this;
+    return listeners(this, type, listener || null, true);
+};
+
+/**
+ * @inheritdoc
+ */
+PulseEmitter.prototype.removeAllListeners = function removeAllListeners(type) {
+    return listeners(this, type, undefined, true);
 };
 
 /**
@@ -137,16 +136,6 @@ PulseEmitter.prototype.emitAsync = function emitAsync(evts) {
     return plet.asyncd(this, evts, 'emit', arguments.length > emitAsync.length ? Array.prototype.slice.call(arguments, emitAsync.length) : null);
 };
 
-PulseEmitter.prototype.cb = function cb(fn) {
-    if (typeof emitter === 'object') {
-        var fn = typeof emitter.addListener === 'function' ? emitter.addListener : 
-                        typeof emitter.addEventListener === 'function' ? emitter.addEventListener : null;
-        if (fn) {
-            binder.push()
-        }
-    }
-};
-
 /**
  * Handles errors by emitting the corresponding event(s)
  * 
@@ -232,14 +221,21 @@ function emitError(pw, err, async, args, end, ignores) {
     }
 }
 
-function bind(emr, que) {
-    if (typeof emr === 'object') {
-        var add = typeof emr.addListener === 'function' ? emr.addListener : 
-                        typeof emr.addEventListener === 'function' ? emr.addEventListener : null;
-        if (add) {
-            var rmv = typeof emr.removeListener === 'function' ? emr.removeListener : 
-                        typeof emr.removeEventListener === 'function' ? emr.removeEventListener : null;
-            que.push({ add: add, remove: rmv });
-        }
+/**
+ * Either removes listener(s) by type (and optionally by listener) or captures a list of listeners
+ * 
+ * @private
+ * @arg {PulseEmitter} pw the pulse emitter
+ * @arg {String} type the event type
+ * @arg {function} [listener] the listener function to to remove (undefined will remove all non-internal listeners)
+ * @arg {Boolean} [remove] true to remove the specified external listener
+ * @returns {(PulseEmitter | function[])} the pulse emitter when removing, otherwise a list of listeners
+ */
+function listeners(pw, type, listener, remove) {
+    for (var i = 0, ls = PulseEmitter.super_.prototype.listeners.call(pw, type), l = ls.length, lu = typeof listener === 'undefined'; i < l; i++) {
+        if (remove && ls[i]._callback === listener) return PulseEmitter.super_.prototype.removeListener.call(pw, type, ls[i]);
+        else if (remove && lu && ls[i]._cbtype !== catType) PulseEmitter.super_.prototype.removeListener.call(pw, type, ls[i]);
+        else if (!remove && ls[i]._callback) ls.splice(i, 1, ls[i]._cbtype === catType ? undefined : ls[i]._callback);
     }
+    return remove ? pw : ls;
 }
