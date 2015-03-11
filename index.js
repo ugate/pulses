@@ -96,8 +96,9 @@ PulseEmitter.prototype.at = function at(type, listener, retrofit) {
  * @arg {*} [artery.id] an identifier assigned to the event chain
  * @arg {Object} [artery.inbound] an object that defines how external events interact with event chain continuity
  * @arg {String} [artery.inbound.event] the event name to listen for on an inbound target selection that, when triggered, will capture results and possibly continue event chain execution
- * @arg {Integer} [artery.inbound.repeat] the number of times that the inbound event will be captured before resuming event chain execution
+ * @arg {Integer} [artery.inbound.repeat=1] the number of times that the inbound event will be captured before resuming event chain execution
  * @arg {Number} [artery.inbound.debounce] duration period in milliseconds to wait before counting consecutive inbound events towards the inbound repeat value
+ * @arg {Number} [artery.inbound.timeout] duration period in milliseconds to wait before resuming event chain execution
  * @arg {String} [artery.inbound.selector] the query selector applied to an inbound target that captures the element(s) that will be listened to (browser only)
  * @arg {Object} pulse the current event state
  * @arg {String} pulse.event the event name
@@ -106,8 +107,9 @@ PulseEmitter.prototype.at = function at(type, listener, retrofit) {
  * @arg {*} [pulse.id] an arbitrary identifier assigned to the individual event
  * @arg {Object} [pulse.inbound] an object that defines how external events interact with the current event's continuity in relation to the event chain
  * @arg {String} [pulse.inbound.event] the event name to listen for on an inbound target selection that, when triggered, will capture results and possibly continue event chain execution
- * @arg {Integer} [pulse.inbound.repeat] the number of times that the inbound event will be captured before resuming event chain execution
+ * @arg {Integer} [pulse.inbound.repeat=1] the number of times that the inbound event will be captured before resuming event chain execution
  * @arg {Number} [pulse.inbound.debounce] duration period in milliseconds to wait before counting consecutive inbound events towards the inbound repeat value
+ * @arg {Number} [pulse.inbound.timeout] duration period in milliseconds to wait before resuming event chain execution
  * @arg {String} [pulse.inbound.selector] the query selector applied to an inbound target that captures the element(s) that will be listened to (browser only)
  * @arg {...*} [arguments] additional arguments passed by the previous listener's artery.pass followed by any arguments passed during initial chain emission
  */
@@ -121,8 +123,9 @@ PulseEmitter.prototype.at = function at(type, listener, retrofit) {
  * @arg {*} [evts.id] an arbitrary identifier assigned to the event chain
  * @arg {Object} [evts.inbound] an object that defines how external events interact with event chain continuity
  * @arg {String} [evts.inbound.event] the event name to listen for on an inbound target selection that, when triggered, will capture results and possibly continue event chain execution
- * @arg {Integer} [evts.inbound.repeat] the number of times that the inbound event will be captured before resuming event chain execution
+ * @arg {Integer} [evts.inbound.repeat=1] the number of times that the inbound event will be captured before resuming event chain execution
  * @arg {Number} [evts.inbound.debounce] duration period in milliseconds to wait before counting consecutive inbound events towards the inbound repeat value
+ * @arg {Number} [evts.inbound.timeout] duration period in milliseconds to wait before resuming event chain execution
  * @arg {String} [evts.inbound.selector] the query selector applied to an inbound target that captures the element(s) that will be listened to (browser only)
  * @arg {(Object | String)} evts[] either the event name or an object containing event properties
  * @arg {String} [evts[].event] the event name
@@ -131,10 +134,11 @@ PulseEmitter.prototype.at = function at(type, listener, retrofit) {
  * @arg {*} [evts[].id] an arbitrary identifier assigned to the individual event
  * @arg {Object} [evts[].inbound] an object that defines how external events interact with the current event's continuity in relation to the event chain
  * @arg {String} [evts[].inbound.event] the event name to listen for on an inbound target selection that, when triggered, will capture results and possibly continue event chain execution
- * @arg {Integer} [evts[].inbound.repeat] the number of times that the inbound event will be captured before resuming event chain execution
+ * @arg {Integer} [evts[].inbound.repeat=1] the number of times that the inbound event will be captured before resuming event chain execution
  * @arg {Number} [evts[].inbound.debounce] duration period in milliseconds to wait before counting consecutive inbound events towards the inbound repeat value
+ * @arg {Number} [evts[].inbound.timeout] duration period in milliseconds to wait before resuming event chain execution
  * @arg {String} [evts[].inbound.selector] the query selector applied to an inbound target that captures the element(s) that will be listened to (browser only)
- * @arg {Object} [inboundTarget] a target that will emit inbound event traffic to inbound pulse event listeners- can be a *EventTarget* (browser) or an *EventEmitter*
+ * @arg {Object} [inboundTarget=pulseEmitter] a target that will emit inbound event traffic to inbound pulse event listeners- can be a *EventTarget* (browser) or an *EventEmitter*
  * @arg {...*} [arguments] additional arguments appeneded to the arguments passed into the first listener in the chain
  * @returns {PulseEmitter} the pulse emitter
  */

@@ -7,9 +7,9 @@
     "json3",
     { "event": "json4", "repeat": 2,  "__test": { "pass": [10, 20, 30] } },
     "json5",
-    { "event": "json6", "parallel": 2 },
+    { "event": "json6", "inbound": "JUNK" },
     "json7",
-    { "event": "json8", "inbound": { "event": "jsonIn" } },
+    { "event": "json8", "inbound": { "event": "test1json8In", "count":  777 } },
     "json9"
   ],
   "repeat": 2

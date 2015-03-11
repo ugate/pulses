@@ -15,7 +15,7 @@ var PulseEmitter = pulses.PulseEmitter;
 var oximetry = module.exports = run;
 oximetry.runDefault = runDefault;
 
-var maxTestMsDflt = 10000;
+var maxTestMsDflt = 10000; // total test run default timeout
 
 /**
  * Test data
@@ -55,18 +55,13 @@ function run(options, emOpts) {
 function runDefault(options) {
     var cpth = path.join(__dirname, 'cases');
     fs.readdir(cpth, function caseDir(err, files) {
-        if (err) {
-            throw err;
-        }
+        if (err) throw err;
         files.sort();
         var p = [];
         for (var i = 0, l = files.length, f; i < l; i++) {
             f = require(path.join(cpth, files[i]));
-            if (typeof f === 'function') {
-                p = p.concat(f());
-            } else {
-                p.push(f);
-            }
+            if (typeof f === 'function') p = p.concat(f());
+            else p.push(f);
         }
         var o = plet.merge({}, options);
         o.tests = p;
@@ -84,6 +79,7 @@ function runDefault(options) {
 function detect(diode) {
     var probe = diode.probe;
     retrofit(diode);
+    //inbound(probe, diode);
     probe.emitter.at(diode.heme.event, function testListener(artery, pulse) {
         //console.log('pulse.id === ' + pulse.id + ' && diode.heme.id === ' + diode.heme.id);
         if (artery.id !== probe.hemo.id || (!diode.isEnd && pulse.id !== diode.heme.id)) return;
@@ -129,9 +125,7 @@ function detect(diode) {
 
         // TODO : add event order assertion
 
-        if (probe.oxm.listener) {
-            probe.oxm.listener(diode);
-        }
+        if (probe.oxm.listener) probe.oxm.listener(diode);
     });
     return diode;
 }
@@ -162,6 +156,22 @@ function retrofit(diode) {
             } else cb();
         });
     }, diode.test.retrofit.type || 'callback');
+}
+
+function inbound(probe, diode) {
+    var ib = diode ? diode.heme.inbound : probe.hemo.inbound;
+    if (!ib) return;
+    var trg = probe.test.inboundTarget || probe.emitter, ttl = tgs.length, cnt = 0;
+    var tgs = ib.selector && typeof trg.querySelectorAll === 'function' ? trg.querySelectorAll(ib.selector) : [trg];
+    var fn = function inboundListener() {
+        if (arguments.length) iv.pass.push.apply(iv.pass, arguments);
+        console.log('@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ %s', iv.pass);
+        //if (++cnt > )
+        if (drip) drip.emit(pw, iv, true);
+    };
+    for (var i = 0; i < ttl; i++) {
+        (tgs[i].addListener || tgs[i].addEventListener)(ib.event, fn, ib.useCapture);
+    }
 }
 
 /**
@@ -227,9 +237,7 @@ function Oximeter(opts) {
      */
     oxm.begin = function begin(hemo, emOpts) {
         banner('listening');
-        for (var p = 0, pl = hemo.length; p < pl; p++) {
-            activate(arterylet(hemo[p]), emOpts);
-        }
+        for (var p = 0, pl = hemo.length; p < pl; p++) activate(arterylet(hemo[p]), emOpts);
         iid = setTimeout(validate, maxWaitMs);
         start();
         for (var i = 0, l = probes.length, arr; i < l; i++) {
@@ -249,9 +257,7 @@ function Oximeter(opts) {
      */
     oxm.read = function read(id, chk, value, isCb) {
         var ia = value === null || isNaN(value), t = ia ? 'act' : 'exp', v = ia ? 1 : value || 1;
-        if (!rds[id]) {
-            rds[id] = { exp: 0, act: 0 };
-        }
+        if (!rds[id]) rds[id] = { exp: 0, act: 0 };
         rds[id][t] += v;
         if (!isCb) rds[t] += v;
         console.log(id + ': exp ' + rds[id].exp + ' act ' + rds[id].act + ' (' + rds.exp + '/' + rds.act + ')');
@@ -354,9 +360,7 @@ function Probe(oxm, slot, hemo, emOpts) {
      */
     probe.activate = function activate() {
         var hasEnd = false;
-        for (var t = 0, pe = probe.hemo.events || probe.hemo, tl = pe.length; t < tl; t++) {
-            hasEnd = detect(new Diode(probe, t, pe[t], pe)).isEnd || hasEnd;
-        }
+        for (var t = 0, pe = probe.hemo.events || probe.hemo, tl = pe.length; t < tl; t++) hasEnd = detect(new Diode(probe, t, pe[t], pe)).isEnd || hasEnd;
         probe.emitter.at(probe.emitter.options.errorEvent, function testErrorListener(err, artery, pulse) { // validate errors
             if (artery.id !== probe.hemo.id) return;
             if (err instanceof Error) probe.oxm.read(probe.markerError, true, null, true);
@@ -417,9 +421,7 @@ function Diode(probe, slot, event, events) {
             plst.rpt++;
         } else {
             diode.heme.count = 1;
-            if (plst.pos >= 0 && pos === 1) {
-                diode.probe.hemo.count++;
-            }
+            if (plst.pos >= 0 && pos === 1) diode.probe.hemo.count++;
         }
         plst.pos = pos;
         plst.cnt = diode.count;
@@ -440,14 +442,10 @@ function Diode(probe, slot, event, events) {
  * @returns {Object} object that indicates if the reading is bleeding out from unrelated arteries
  */
 function bleeding(artery, oximeter, slot) {
-    if (!oximeter.arteries[slot]) {
-        oximeter.arteries[slot] = artery;
-    } else {
-        for (var a in oximeter.arteries) {
-            if (oximeter.arteries[a] === artery && a !== slot) {
-                return Object.freeze({ slot: slot, other: a << 0 });
-            }
-        }
+    if (!oximeter.arteries[slot]) oximeter.arteries[slot] = artery;
+    else {
+        for (var a in oximeter.arteries)
+            if (oximeter.arteries[a] === artery && a !== slot) return Object.freeze({ slot: slot, other: a << 0 });
     }
     return Object.freeze({ slot: slot, other: slot });
 }
