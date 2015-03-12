@@ -34,21 +34,21 @@ function PulseEmitter(options) {
  * @inheritdoc
  */
 PulseEmitter.prototype.listeners = function listeners(type) {
-    return listeners(this, type, null, false);
+    return listens(this, type, null, false);
 };
 
 /**
  * @inheritdoc
  */
 PulseEmitter.prototype.removeListener = function removeListener(type, listener) {
-    return listeners(this, type, listener || null, true);
+    return listens(this, type, listener || null, true);
 };
 
 /**
  * @inheritdoc
  */
 PulseEmitter.prototype.removeAllListeners = function removeAllListeners(type) {
-    return listeners(this, type, undefined, true);
+    return listens(this, type, undefined, true);
 };
 
 /**
@@ -193,7 +193,7 @@ PulseEmitter.prototype.error = function errored(err, async, end, ignores) {
 function listen(pw, type, listener, fnm, rf, cbtype) {
     var fn = function pulseListener(flow, artery, pulse) {
         if (!rf || !(artery instanceof cat.Artery) || !(pulse instanceof cat.Pulse) || flow instanceof Error)
-            return arguments.length ? fn._callback.apply(this, Array.prototype.slice.call(arguments)) : fn._callback();
+            return arguments.length ? fn._callback.apply(pw, Array.prototype.slice.call(arguments)) : fn._callback.call(pw);
         var isRfCb = rf === 'callback', emitErrs = pulse.emitErrors || (pulse.emitErrors !== false && artery.emitErrors) || 
             (pulse.emitErrors !== false && artery.emitErrors !== false && pw.options && pw.options.emitErrors);
         var args = arguments.length > fn.length ?  Array.prototype.slice.call(arguments, isRfCb ? fn.length : 1) : null;
@@ -256,7 +256,7 @@ function emitError(pw, err, async, args, end, ignores) {
  * @arg {Boolean} [remove] true to remove the specified external listener
  * @returns {(PulseEmitter | function[])} the pulse emitter when removing, otherwise a list of listeners
  */
-function listeners(pw, type, listener, remove) {
+function listens(pw, type, listener, remove) {
     for (var i = 0, ls = PulseEmitter.super_.prototype.listeners.call(pw, type), l = ls.length, lu = typeof listener === 'undefined'; i < l; i++) {
         if (remove && ls[i]._callback === listener) return PulseEmitter.super_.prototype.removeListener.call(pw, type, ls[i]);
         else if (remove && lu && ls[i]._cbtype !== catType) PulseEmitter.super_.prototype.removeListener.call(pw, type, ls[i]);

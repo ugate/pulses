@@ -79,7 +79,7 @@ function runDefault(options) {
 function detect(diode) {
     var probe = diode.probe;
     retrofit(diode);
-    //inbound(probe, diode);
+    inbound(probe, diode);
     probe.emitter.at(diode.heme.event, function testListener(artery, pulse) {
         //console.log('pulse.id === ' + pulse.id + ' && diode.heme.id === ' + diode.heme.id);
         if (artery.id !== probe.hemo.id || (!diode.isEnd && pulse.id !== diode.heme.id)) return;
@@ -104,8 +104,6 @@ function detect(diode) {
         // verify test arguments have been passed from
         assert.deepEqual(args, passed, 'listener arguments: "' + args + '" != expected arguments: "' + passed + '"');
         assert.deepEqual(artery.pass, probe.pass, 'listener pass: "' + artery.pass + '" != expected pass: "' + probe.pass + '"');
-
-        //assert.ok(diode, 'Exceeded "' + evt + '" event(s) at slot: ' + probe.diodes[evt].length);
         
         // update test values according to callback iteration
         var indices = diode.absorb(artery, pulse);
@@ -126,7 +124,13 @@ function detect(diode) {
         // TODO : add event order assertion
 
         if (probe.oxm.listener) probe.oxm.listener(diode);
+
+        if (diode.inboundWait) // emit/dispatch waiting inbound event
+            plet.defer(function emitTestInbounds() {
+                plet.event(diode.inboundWait.ib.event, diode.inboundWait.targets);
+            });
     });
+    probe.diodes.push(diode);
     return diode;
 }
 
@@ -145,10 +149,10 @@ function retrofit(diode) {
         assert.ok(typeof cb === 'function', 'last argument is not a valid callback function: ' + util.inspect(args));
         plet.defer(function immediateCb() {
             var argsr = diode.test.retrofit.args;
-            console.log('================ %s retrofit i/o ======================', diode.heme.event);
+            console.log('================ "%s" retrofit i/o ======================', diode.heme.event);
             console.dir(args);
             console.dir(argsr);
-            console.log('====================================================');
+            console.log('======================================================');
             if (argsr && argsr.length) {
                 if (argsr[0] instanceof Error) diode.probe.oxm.read(diode.probe.markerError, false, 1, true);
                 diode.probe.pass.push.apply(diode.probe.pass, argsr);
@@ -158,19 +162,31 @@ function retrofit(diode) {
     }, diode.test.retrofit.type || 'callback');
 }
 
+/**
+ * Listens for incoming events
+ * 
+ * @arg {Probe} probe the test probe
+ * @arg {Diode} [diode] the test diode (omit to process inbound on the probe)
+ */
 function inbound(probe, diode) {
     var ib = diode ? diode.heme.inbound : probe.hemo.inbound;
     if (!ib) return;
-    var trg = probe.test.inboundTarget || probe.emitter, ttl = tgs.length, cnt = 0;
+    var trg = probe.test.inboundTarget || probe.emitter;
     var tgs = ib.selector && typeof trg.querySelectorAll === 'function' ? trg.querySelectorAll(ib.selector) : [trg];
-    var fn = function inboundListener() {
-        if (arguments.length) iv.pass.push.apply(iv.pass, arguments);
-        console.log('@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ %s', iv.pass);
-        //if (++cnt > )
-        if (drip) drip.emit(pw, iv, true);
+    var fn = function inboundTestListener() {
+        console.log('================ "%s" inbound ======================', ib.event);
+        console.dir(arguments);
+        console.log('======================================================');
+        if (arguments.length) probe.pass.push.apply(iv.pass, arguments);
+        if (++ib.count >= ib.repeat) {
+            plet.event(ib.event, tgs, fn, ib.useCapture, true); // remove listener
+        }
     };
-    for (var i = 0; i < ttl; i++) {
-        (tgs[i].addListener || tgs[i].addEventListener)(ib.event, fn, ib.useCapture);
+    plet.event(ib.event, tgs, fn, ib.useCapture);
+    if (diode) {
+        diode.inbound = { ib: ib, targets: tgs };
+        var ld = probe.diodes.length && probe.diodes[probe.diodes.length - 1];
+        if (ld) ld.inboundWait = diode.inbound; // queue inbound event on previous diode for emission/dispatch
     }
 }
 
@@ -351,7 +367,7 @@ function Probe(oxm, slot, hemo, emOpts) {
     probe.marker = (hemo.id ? hemo.id + ' ' : '') + 'Test[' + probe.slot + ']';
     probe.markerCb = probe.marker + ' callback';
     probe.markerError = probe.marker + ' ' + probe.emitter.options.errorEvent;
-    probe.diodes = {};
+    probe.diodes = [];
     
     /**
      * Activates the probe by generating all the corresponding diodes that are ready to start taking measurements
@@ -403,6 +419,8 @@ function Diode(probe, slot, event, events) {
     diode.isEnd = diode.heme.event === diode.probe.emitter.options.endEvent;
     diode.count = 0;
     diode.marker = (diode.heme.id || '') + ' ' + diode.heme.event + (!!~diode.slot ? '[' + diode.slot + ']' : '');
+    diode.inboundWait = null;
+    diode.inbound = null;
     
     /**
      * Absorbs/reads an artery/pulse for measurement
