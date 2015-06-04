@@ -92,7 +92,8 @@ PulseEmitter.prototype.at = function at(type, listener, retrofit) {
  * @arg {String} artery.type the emission execution type applied to the event chain- async, sync, fork, spawn, exec
  * @arg {Integer} artery.repeat the number of times that the event chain will/has been repeated
  * @arg {*[]} artery.data a mutable array for storing data throughout the life-cycle of the event chain
- * @arg {*[]} artery.pass a mutable array for adding arguments that will be passed into the next listener functions in the event chain (cleared after the each emission)
+ * @arg {Object} artery.passByRef a mutable object for adding properties/values to that will be passed into the next listener functions in the event chain that have a configured "passRefName" that matches the "passByRef" property name (passed in alphabetical order)
+ * @arg {*[]} artery.pass a mutable array for adding arguments that will be passed into the next listener functions in the event chain (cleared after each emission)
  * @arg {*} [artery.id] an identifier assigned to the event chain
  * @arg {Object} [artery.inbound] an object that defines how external events interact with event chain continuity
  * @arg {String} [artery.inbound.event] the event name to listen for on an inbound target selection that, when triggered, will capture results and possibly continue event chain execution
@@ -132,21 +133,23 @@ PulseEmitter.prototype.at = function at(type, listener, retrofit) {
  * @arg {String} [evts[].type] overrides the inherited type value from the event chain
  * @arg {Integer} [evts[].repeat] overrides the inherited repeat value from the event chain
  * @arg {*} [evts[].id] an arbitrary identifier assigned to the individual event
- * @arg {Object} [evts[].inbound] an object that defines how external events interact with the current event's continuity in relation to the event chain
+ * @arg {Array} [evts[].passRefNames] a set of property names that will be matched against the current "pass" object where the "pass" property values will passed into the next listener in the chain (listener arguments: artery, pulse, [arguments from artery.passByRef in alphabetical order, ...], [arguments from artery.pass in order of insertion...])
+ * @arg {Object} [evts[].inbound] an object that defines how external inbound events interact with the current event's continuity in relation to the event chain
  * @arg {String} [evts[].inbound.event] the event name to listen for on an inbound target selection that, when triggered, will capture results and possibly continue event chain execution
  * @arg {Integer} [evts[].inbound.repeat=1] the number of times that the inbound event will be captured before resuming event chain execution
  * @arg {Number} [evts[].inbound.debounce] duration period in milliseconds to wait before counting consecutive inbound events towards the inbound repeat value
  * @arg {Number} [evts[].inbound.timeout] duration period in milliseconds to wait before resuming event chain execution
  * @arg {String} [evts[].inbound.selector] the query selector applied to an inbound target that captures the element(s) that will be listened to (browser only)
+ * @arg {Object} [passByRef={}] the initial object containing key/values that will be checked that a key matches a pulse events "refId" before passing its value into the first listener in the chain (after artery and pulse)
  * @arg {Object} [inboundTarget=pulseEmitter] a target that will emit inbound event traffic to inbound pulse event listeners- can be a *EventTarget* (browser) or an *EventEmitter*
- * @arg {...*} [arguments] additional arguments appeneded to the arguments passed into the first listener in the chain
+ * @arg {...*} [arguments] additional arguments appeneded to the arguments passed into the first listener in the chain (after: artery, pulse, [pass by reference arguments in alphabetical order, ...], [arguments...])
  * @returns {PulseEmitter} the pulse emitter
  */
-PulseEmitter.prototype.to = function to(evts, inboundTarget) {
+PulseEmitter.prototype.to = function to(evts, passByRef, inboundTarget) {
     var fl = to.length, pw = this;
     var iv = cat(pw, function toListener(type, listener) {
         listen(pw, type, listener, null, true, catType);
-    }, inboundTarget, arguments.length > fl ? Array.prototype.slice.call(arguments, fl) : null);
+    }, inboundTarget, passByRef, arguments.length > fl ? Array.prototype.slice.call(arguments, fl) : null);
     iv.pump(evts, true);
 };
 
