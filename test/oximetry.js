@@ -257,7 +257,7 @@ function Oximeter(opts) {
         iid = setTimeout(validate, maxWaitMs);
         start();
         for (var i = 0, l = probes.length, arr; i < l; i++) {
-            arr = [hemo[i], probes[i].test.passByRef, probes[i].test.inboundTarget];
+            arr = [hemo[i], probes[i].test.passes || hemo[i].passes, probes[i].test.inboundTarget];
             if (probes[i].test.pass) arr.push.apply(arr, probes[i].test.pass);
             probes[i].emitter.to.apply(probes[i].emitter, arr);
         }
@@ -330,6 +330,7 @@ function Oximeter(opts) {
      * @returns {Probe} the generated probe that is performing reads
      */
     function activate(hemo, emOpts) {
+        hemo.passes = (emOpts && emOpts.passes) || {}; // default passes
         hemo.count = 1; // override default count
         var probe = new Probe(oxm, probes.length, hemo, emOpts);
         oxm.arteries.push(hemo);

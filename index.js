@@ -75,13 +75,12 @@ PulseEmitter.prototype.on = PulseEmitter.prototype.addListener;
  *
  * @arg {String} type the event type
  * @arg {pulseListener} listener the listener function called when the pulse event type is emitted
- * @arg {String} [retrofit] a flag that indicates a pattern to mimic (e.g. "callback" would pass in pending arguments to the listener with an auto-generated callback function 
- *                          as the last argument and would pass the callback results into the next waiting listeners in the chain; if the first argument is an Error it will 
- *                          emit/throw accordingly)
+ * @arg {String} [retrofit] a flag that indicates a pattern to mimic (e.g. "callback" would pass in pending arguments to the listener with an auto-generated callback function as the last argument and would pass the callback results into the next waiting listeners in the chain; if the first argument is an Error it will emit/throw accordingly)
+ * @arg {...*} [arguments] additional "passes" argument names that will automatically be set on the auto-generated callback's artery.passes by name in order and preceeding any arguments in artery.pass 
  * @returns {PulseEmitter} the pulse emitter
  */
 PulseEmitter.prototype.at = function at(type, listener, retrofit) {
-    return listen(this, type, listener, null, retrofit || true);
+    return listen(this, type, listener, null, retrofit || true, arguments.length > at.length ? Array.prototype.slice.apply(at.length - 1) : null);
 };
 
 /**
@@ -92,7 +91,7 @@ PulseEmitter.prototype.at = function at(type, listener, retrofit) {
  * @arg {String} artery.type the emission execution type applied to the event chain- async, sync, fork, spawn, exec
  * @arg {Integer} artery.repeat the number of times that the event chain will/has been repeated
  * @arg {*[]} artery.data a mutable array for storing data throughout the life-cycle of the event chain
- * @arg {Object} artery.passByRef a mutable object for adding properties/values to that will be passed into the next listener functions in the event chain that have a configured "passRefName" that matches the "passByRef" property name (passed in alphabetical order)
+ * @arg {Object} artery.passes a mutable object for adding properties/values to that will be passed into any subsiquent listeners whose event.passes has an entry with the same name (listener arguments: artery, pulse, [arguments from artery.passes in the order defined in event.passes, ...], [arguments from artery.pass in order of insertion...])
  * @arg {*[]} artery.pass a mutable array for adding arguments that will be passed into the next listener functions in the event chain (cleared after each emission)
  * @arg {*} [artery.id] an identifier assigned to the event chain
  * @arg {Object} [artery.inbound] an object that defines how external events interact with event chain continuity
@@ -133,23 +132,23 @@ PulseEmitter.prototype.at = function at(type, listener, retrofit) {
  * @arg {String} [evts[].type] overrides the inherited type value from the event chain
  * @arg {Integer} [evts[].repeat] overrides the inherited repeat value from the event chain
  * @arg {*} [evts[].id] an arbitrary identifier assigned to the individual event
- * @arg {Array} [evts[].passRefNames] a set of property names that will be matched against the current "pass" object where the "pass" property values will passed into the next listener in the chain (listener arguments: artery, pulse, [arguments from artery.passByRef in alphabetical order, ...], [arguments from artery.pass in order of insertion...])
+ * @arg {Array} [evts[].passes] a set of property names whose values will be passed into subsequent listeners when an artery.passes property exists with the same name (listener arguments: artery, pulse, [arguments from artery.passes in the order defined in event.passes, ...], [arguments from artery.pass in order of insertion...])
  * @arg {Object} [evts[].inbound] an object that defines how external inbound events interact with the current event's continuity in relation to the event chain
  * @arg {String} [evts[].inbound.event] the event name to listen for on an inbound target selection that, when triggered, will capture results and possibly continue event chain execution
  * @arg {Integer} [evts[].inbound.repeat=1] the number of times that the inbound event will be captured before resuming event chain execution
  * @arg {Number} [evts[].inbound.debounce] duration period in milliseconds to wait before counting consecutive inbound events towards the inbound repeat value
  * @arg {Number} [evts[].inbound.timeout] duration period in milliseconds to wait before resuming event chain execution
  * @arg {String} [evts[].inbound.selector] the query selector applied to an inbound target that captures the element(s) that will be listened to (browser only)
- * @arg {Object} [passByRef={}] the initial object containing key/values that will be checked that a key matches a pulse events "refId" before passing its value into the first listener in the chain (after artery and pulse)
+ * @arg {Object} [passes={}] the initial artery.passes object containing properties/values that will be passed into any pulse listener whose event.passes has an entry with the same name (listener arguments: artery, pulse, [arguments from artery.passes in the order defined in event.passes, ...], [arguments from artery.pass in order of insertion...])
  * @arg {Object} [inboundTarget=pulseEmitter] a target that will emit inbound event traffic to inbound pulse event listeners- can be a *EventTarget* (browser) or an *EventEmitter*
  * @arg {...*} [arguments] additional arguments appeneded to the arguments passed into the first listener in the chain (after: artery, pulse, [pass by reference arguments in alphabetical order, ...], [arguments...])
  * @returns {PulseEmitter} the pulse emitter
  */
-PulseEmitter.prototype.to = function to(evts, passByRef, inboundTarget) {
+PulseEmitter.prototype.to = function to(evts, passes, inboundTarget) {
     var fl = to.length, pw = this;
     var iv = cat(pw, function toListener(type, listener) {
         listen(pw, type, listener, null, true, catType);
-    }, inboundTarget, passByRef, arguments.length > fl ? Array.prototype.slice.call(arguments, fl) : null);
+    }, inboundTarget, passes, arguments.length > fl ? Array.prototype.slice.call(arguments, fl) : null);
     iv.pump(evts, true);
 };
 
@@ -191,9 +190,10 @@ PulseEmitter.prototype.error = function errored(err, async, end, ignores) {
  * @arg {(String | Boolean)} [rf] a flag that indicates a pattern to mimic (e.g. "callback" would pass in pending arguments to the listener with an auto-generated callback function 
  *                          as the last argument and would pass the callback results into the next waiting listeners in the chain; if the first argument is an Error it will emit/throw 
  *                          accordingly)
+ * @arg {Array} [passes] an array of names that will automatically be set on the auto-generated callback's artery.passes by name in order and preceeding any arguments in artery.pass
  * @returns {PulseEmitter} the pulse emitter
  */
-function listen(pw, type, listener, fnm, rf, cbtype) {
+function listen(pw, type, listener, fnm, rf, cbtype, passes) {
     var fn = function pulseListener(flow, artery, pulse) {
         if (!rf || !(artery instanceof cat.Artery) || !(pulse instanceof cat.Pulse) || flow instanceof Error)
             return arguments.length ? fn._callback.apply(pw, Array.prototype.slice.call(arguments)) : fn._callback.call(pw);
@@ -203,8 +203,12 @@ function listen(pw, type, listener, fnm, rf, cbtype) {
         if (isRfCb) {
             (args = args || []).push(function retrofitCb(err) { // last argument should be the callback function
                 if (err instanceof Error) emitError(pw, err, pulse.type, [artery, pulse]); // emit any callback errors
-                if (arguments.length === 1) artery.pass.push(arguments[0]);
-                else if (arguments.length) artery.pass.push.apply(artery.pass, Array.prototype.slice.call(arguments));
+                var pi = 0, al;
+                if (passes) for (var pl = passes.length; pi < pl; ++pi) {
+                    artery.passes[passes[pi]] = arguments[pi]; // pass by name before any other arguments are passed
+                }
+                if ((al = arguments.length - (pi += pi > 0)) === 1) artery.pass.push(arguments[pi]);
+                else if (al) artery.pass.push.apply(artery.pass, Array.prototype.slice.call(arguments, pi));
             });
         }
         if (emitErrs) {
